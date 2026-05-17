@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>reader - ドキュメントビューア</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="main">
+    <!-- 左サイドバー: 上下に閲覧ツリー／編集ツリー -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">reader</span>
+        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="サイドバーを開閉">‹</button>
+      </div>
+      <div class="sidebar-filter">
+        <input type="search" id="file-filter-input" class="file-filter-input" placeholder="ファイル名で絞り込み" autocomplete="off">
+        <button type="button" class="file-filter-clear hidden" id="file-filter-clear" title="クリア">×</button>
+      </div>
+
+      <!-- 上半分: 閲覧ツリー -->
+      <div class="sidebar-section sidebar-section-read" id="sidebar-section-read">
+        <div class="sidebar-section-title">
+          <span class="sidebar-section-title-text" id="sidebar-section-read-title">閲覧</span>
+          <span class="tree-actions">
+            <button type="button" class="tree-action-btn" id="toggle-read-section-btn" onclick="toggleSidebarSection('read')" title="readingsを非表示">▾</button>
+            <button type="button" class="tree-action-btn" id="toggle-all-read-btn" onclick="toggleAllRead()" title="全て折り畳み">⊟</button>
+          </span>
+        </div>
+        <nav class="file-list" id="file-list"></nav>
+      </div>
+
+      <div class="sidebar-section-resizer hidden" id="sidebar-section-resizer" title="ドラッグで閲覧/編集の高さを変更" role="separator" aria-orientation="horizontal" tabindex="0"></div>
+
+      <!-- 下半分: 編集ツリー（-write 指定時のみ表示） -->
+      <div class="sidebar-section sidebar-section-write hidden" id="sidebar-section-write">
+        <div class="sidebar-section-title">
+          <span class="sidebar-section-title-text" id="sidebar-section-write-title">編集</span>
+          <span class="tree-actions">
+            <button type="button" class="tree-action-btn" id="toggle-write-section-btn" onclick="toggleSidebarSection('write')" title="writingsを非表示">▾</button>
+            <button type="button" class="tree-action-btn" id="toggle-all-write-btn" onclick="toggleAllWrite()" title="全て折り畳み">⊟</button>
+          </span>
+        </div>
+        <nav class="file-list" id="write-file-list"></nav>
+      </div>
+    </aside>
+    <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を変更"></div>
+    <button class="sidebar-open-btn hidden" id="sidebar-open-btn" onclick="toggleSidebar()" title="サイドバーを開く">›</button>
+
+    <!-- 右コンテンツ: スマホ用タブ + 左右の二段ペイン -->
+    <div class="content-area">
+      <!-- スマホ表示でのみ出る閲覧/編集の切替タブ（-write 指定時のみ表示） -->
+      <div class="mobile-pane-tabs hidden" id="mobile-pane-tabs">
+        <button type="button" class="mobile-pane-tab active" data-pane="read" onclick="setMobilePane('read')">閲覧</button>
+        <button type="button" class="mobile-pane-tab" data-pane="write" onclick="setMobilePane('write')">編集</button>
+      </div>
+
+      <main class="content-wrapper">
+      <!-- 左ペイン: 閲覧（既存の Markdown 表示） -->
+      <section class="pane pane-read" id="pane-read">
+        <div class="pane-header">
+          <span class="pane-filename" id="read-filename">ファイルを選択してください</span>
+          <button class="pane-header-btn" id="read-copy-btn" onclick="copyReadFilename().catch(()=>{})" title="ファイル名をコピー" disabled>コピー</button>
+        </div>
+        <div class="worktree-tabs hidden" id="worktree-tabs"></div>
+
+        <div class="diff-button-bar hidden" id="diff-button-bar">
+          <button class="diff-toggle-btn" id="toggle-diff-btn" onclick="toggleDiffView()">
+            <svg class="diff-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
+            </svg>
+            <span id="diff-btn-text">差分を表示</span>
+          </button>
+          <span class="diff-hint">mainブランチとの差分があります</span>
+        </div>
+
+        <div class="content" id="content">
+          <div class="empty-state" id="empty-state">ファイルを選択してください</div>
+
+          <article class="document hidden" id="document"></article>
+
+          <div class="diff-view hidden" id="diff-view">
+            <div class="diff-container">
+              <div class="diff-panel">
+                <div class="diff-panel-header diff-panel-header-base">main (ベース)</div>
+                <div class="diff-panel-content" id="diff-left"></div>
+              </div>
+              <div class="diff-panel">
+                <div class="diff-panel-header diff-panel-header-current" id="diff-right-header">現在のブランチ</div>
+                <div class="diff-panel-content" id="diff-right"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ペイン間リサイザ（-write 指定時のみ表示） -->
+      <div class="pane-resizer hidden" id="pane-resizer" title="ドラッグで幅を変更（ダブルクリックでリセット）"></div>
+
+      <!-- 右ペイン: 編集（-write 指定時のみ表示） -->
+      <section class="pane pane-write hidden" id="pane-write">
+        <div class="pane-header">
+          <span class="pane-filename" id="edit-filename">ファイルを選択してください</span>
+          <button class="pane-header-btn" id="edit-copy-btn" onclick="copyWriteFilename().catch(()=>{})" title="ファイル名をコピー" disabled>コピー</button>
+          <span class="edit-status hidden" id="edit-status"></span>
+          <button class="pane-header-btn" id="edit-save-btn" onclick="saveCurrentEdit().catch(()=>{})" disabled>保存</button>
+        </div>
+        <div class="edit-area" id="edit-area">
+          <div class="empty-state" id="edit-empty-state">編集するファイルを下のツリーから選択</div>
+          <textarea class="edit-textarea hidden" id="edit-textarea" spellcheck="false" autocomplete="off"></textarea>
+        </div>
+      </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

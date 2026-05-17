@@ -1,0 +1,1044 @@
+/* Reset */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  line-height: 1.6;
+}
+
+/* form コントロールはフォントを継承しないので明示 */
+input, textarea, button, select {
+  font-family: inherit;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+}
+
+/* メインコンテンツ */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+/* サイドバー: フレックスで縦に積み、上下のツリーが残りスペースを 50/50 で分け合う */
+.sidebar {
+  width: 256px;
+  background-color: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 0 !important;
+  border-right-width: 0;
+  overflow: hidden;
+}
+
+/* サイドバーのリサイズハンドル */
+.sidebar-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+  margin-left: -2px;
+  position: relative;
+  z-index: 5;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.resizing {
+  background-color: #93c5fd;
+}
+
+.sidebar.collapsed + .sidebar-resizer {
+  display: none;
+}
+
+body.resizing-sidebar {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* サイドバーのヘッダー */
+.sidebar-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: lowercase;
+  border-bottom: 1px solid #e5e7eb;
+  background-color: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-toggle,
+.sidebar-open-btn {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+}
+
+.sidebar-toggle:hover,
+.sidebar-open-btn:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+}
+
+.sidebar-open-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  background-color: #f9fafb;
+}
+
+/* サイドバー絞り込み */
+.sidebar-filter {
+  position: relative;
+  padding: 8px 8px 0;
+}
+
+.file-filter-input {
+  width: 100%;
+  padding: 5px 24px 5px 8px;
+  font-size: 12px;
+  color: #374151;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  outline: none;
+}
+
+.file-filter-input::placeholder {
+  color: #9ca3af;
+}
+
+.file-filter-input:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+}
+
+.file-filter-clear {
+  position: absolute;
+  top: 50%;
+  right: 12px;
+  transform: translateY(-25%);
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+}
+
+.file-filter-clear:hover {
+  color: #374151;
+}
+
+.file-filter-empty {
+  padding: 16px 8px;
+  color: #9ca3af;
+  font-size: 12px;
+  text-align: center;
+}
+
+.file-filter-highlight {
+  background-color: #fef08a;
+  color: #713f12;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+/* サイドバーの上下セクション（閲覧ツリーと編集ツリー）*/
+.sidebar-section {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* 編集セクション非表示時は閲覧セクションが残りスペース全部 */
+.sidebar-section-write.hidden + /* nothing */ .sidebar-section-read {
+  /* fallback unused */
+}
+
+.sidebar-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #6b7280;
+  padding: 6px 8px 4px 12px;
+  flex-shrink: 0;
+  background-color: #f3f4f6;
+  border-bottom: 1px solid #e5e7eb;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar-section-title-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-actions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.tree-action-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.tree-action-btn:hover {
+  background-color: #e5e7eb;
+  color: #374151;
+  border-color: #d1d5db;
+}
+
+.sidebar-section .file-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sidebar-section.section-hidden {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.sidebar-section.section-hidden .file-list {
+  display: none;
+}
+
+.sidebar-section-resizer {
+  height: 6px;
+  flex-shrink: 0;
+  cursor: row-resize;
+  background-color: transparent;
+  border-top: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+  transition: background-color 0.15s ease;
+}
+
+.sidebar-section-resizer:hover,
+.sidebar-section-resizer.resizing {
+  background-color: #bfdbfe;
+}
+
+.sidebar-section-resizer:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+}
+
+body.resizing-sidebar-section {
+  cursor: row-resize;
+  user-select: none;
+}
+
+/* ファイルリスト */
+.file-list {
+  padding: 8px;
+}
+
+.root-accordion {
+  margin-bottom: 8px;
+}
+
+.root-accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 6px;
+  color: #374151;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.root-accordion-header:hover {
+  background-color: #e5e7eb;
+}
+
+.root-accordion-toggle {
+  width: 12px;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #6b7280;
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+}
+
+.root-accordion.collapsed .root-accordion-toggle {
+  transform: rotate(0deg);
+}
+
+.root-accordion-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.root-accordion-body {
+  padding-left: 10px;
+}
+
+.root-accordion.collapsed .root-accordion-body {
+  display: none;
+}
+
+/* ディレクトリグループ */
+.dir-group {
+  margin-bottom: 12px;
+}
+
+.dir-label {
+  font-size: 12px;
+  color: #9ca3af;
+  padding: 0 8px;
+  margin-bottom: 4px;
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+.dir-label-toggle {
+  cursor: pointer;
+  margin-right: 4px;
+  font-size: 10px;
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  transition: transform 0.15s ease;
+  transform: rotate(90deg);
+}
+
+.dir-group.collapsed .dir-label-toggle {
+  transform: rotate(0deg);
+}
+
+.dir-group.collapsed .file-item {
+  display: none;
+}
+
+.dir-label-sep {
+  color: #d1d5db;
+}
+
+.dir-label-segment {
+  cursor: pointer;
+}
+
+.dir-label-segment:hover {
+  color: #6b7280;
+  text-decoration: underline;
+}
+
+/* ディレクトリフィルターバー */
+.dir-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: #eef2ff;
+  border-radius: 6px;
+}
+
+.dir-filter-back-btn {
+  background: none;
+  border: 1px solid #6366f1;
+  border-radius: 4px;
+  color: #6366f1;
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dir-filter-back-btn:hover {
+  background-color: #e0e7ff;
+}
+
+.dir-filter-breadcrumb {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dir-filter-sep {
+  color: #a5b4fc;
+  margin: 0 1px;
+}
+
+.dir-filter-segment-link {
+  color: #6366f1;
+  cursor: pointer;
+}
+
+.dir-filter-segment-link:hover {
+  text-decoration: underline;
+}
+
+.dir-filter-segment-current {
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+/* ファイル項目 */
+.file-item {
+  font-size: 14px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wt-badges {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.wt-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.3;
+  white-space: nowrap;
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+}
+
+.file-item:hover {
+  background-color: #e5e7eb;
+}
+
+.file-item.selected {
+  background-color: #dbeafe;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* コンテンツラッパー: 左右ペインを横並び（編集ペインがある時のみ二段） */
+.content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* 左右ペイン共通 */
+.pane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.pane-write {
+  border-left: 1px solid #e5e7eb;
+}
+
+/* 閲覧/編集ペイン間のリサイズハンドル */
+.pane-resizer {
+  width: 4px;
+  cursor: col-resize;
+  background-color: transparent;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease;
+  margin-left: -2px;
+  margin-right: -2px;
+  position: relative;
+  z-index: 5;
+}
+
+.pane-resizer:hover,
+.pane-resizer.resizing {
+  background-color: #93c5fd;
+}
+
+body.resizing-pane {
+  cursor: col-resize;
+  user-select: none;
+}
+
+/* Worktree タブバー */
+.worktree-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 16px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.worktree-tab {
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.worktree-tab:hover {
+  color: #374151;
+  background-color: #f3f4f6;
+}
+
+.worktree-tab.active {
+  color: #2563eb;
+  font-weight: 500;
+  border-bottom-color: #2563eb;
+  background-color: #ffffff;
+}
+
+.worktree-tab.different {
+  color: #ea580c;
+  background-color: #fff7ed;
+  border-bottom-color: #fb923c;
+}
+
+.worktree-tab.different:hover {
+  background-color: #ffedd5;
+}
+
+.worktree-tab.not-exists {
+  color: #d1d5db;
+  text-decoration: line-through;
+  cursor: default;
+}
+
+.worktree-tab.not-exists:hover {
+  background-color: transparent;
+  color: #d1d5db;
+}
+
+/* コンテンツエリア */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.empty-state {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+}
+
+/* ドキュメント表示 */
+.document {
+  max-width: none;
+}
+
+.document h1 {
+  font-size: 2em;
+  font-weight: bold;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.document h2 {
+  font-size: 1.5em;
+  font-weight: bold;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+.document h3 {
+  font-size: 1.25em;
+  font-weight: bold;
+  margin-top: 20px;
+  margin-bottom: 8px;
+}
+
+.document p {
+  margin-bottom: 16px;
+}
+
+.document ul, .document ol {
+  margin-bottom: 16px;
+  padding-left: 24px;
+}
+
+.document li {
+  margin-bottom: 4px;
+}
+
+.document table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 16px;
+}
+
+.document th, .document td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.document th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.document code {
+  background-color: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.document pre {
+  background-color: #1f2937;
+  color: #f9fafb;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.document pre code {
+  background-color: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.document blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 16px;
+  color: #6b7280;
+  margin-bottom: 16px;
+}
+
+/* frontmatter メタ表示 */
+.document-meta {
+  background-color: #f5f3ff;
+  border-left: 3px solid #6366f1;
+  padding: 12px 16px;
+  margin-bottom: 24px;
+  border-radius: 0 4px 4px 0;
+  font-size: 13px;
+}
+
+.document-meta-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+  margin-bottom: 6px;
+}
+
+.document-meta-fields {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+.document-meta-key {
+  font-weight: 500;
+  color: #4338ca;
+  margin: 0;
+}
+
+.document-meta-value {
+  color: #4b5563;
+  margin: 0;
+  word-break: break-word;
+}
+
+/* ファイル未存在メッセージ */
+.not-found-message {
+  color: #d97706;
+  background-color: #fef3c7;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* ペインのヘッダー（ファイル名 + 操作ボタン） */
+.pane-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background-color: #f9fafb;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.pane-filename {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: #374151;
+}
+
+.edit-status {
+  font-size: 12px;
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.edit-status-error {
+  color: #b91c1c;
+}
+
+.pane-header-btn {
+  padding: 4px 12px;
+  font-size: 13px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: 1px solid #2563eb;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pane-header-btn:hover:not(:disabled) {
+  background-color: #1d4ed8;
+}
+
+.pane-header-btn:disabled {
+  background-color: #d1d5db;
+  border-color: #d1d5db;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* コピー成功時の一時的なフィードバック表示（緑色） */
+.pane-header-btn.copied {
+  background-color: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+}
+
+/* 編集ペインの本体エリア（textarea を内包）
+ * .pane の flex 1 子要素として配置されつつ、内部は通常のブロックスクロール領域に
+ * する。flex コンテナにすると子の textarea が flex-shrink で縮められ、
+ * JS が style.height = scrollHeight に伸ばしてもスクロールが発生しなくなる。
+ */
+.edit-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+
+/* 編集テキストエリア
+ * - overflow: hidden + JS による auto-grow で textarea 自身のスクロールバーを消し、
+ *   親 .edit-area のスクロールバー一本にまとめる。
+ * - height は JS が scrollHeight に追従させる。min-height で空のときも可視領域を埋める。
+ */
+.edit-textarea {
+  width: 100%;
+  display: block;
+  min-height: 100%;
+  border: none;
+  outline: none;
+  padding: 24px 32px;
+  font-size: 16px;
+  line-height: 1.6;
+  resize: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: #ffffff;
+  color: #111827;
+  tab-size: 2;
+}
+
+/* 差分表示ボタンバー */
+.diff-button-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background-color: #fef3c7;
+  border-bottom: 1px solid #fcd34d;
+  flex-shrink: 0;
+}
+
+.diff-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background-color: #ffffff;
+  border: 1px solid #d97706;
+  border-radius: 6px;
+  color: #d97706;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.diff-toggle-btn:hover {
+  background-color: #fef3c7;
+}
+
+.diff-toggle-btn.active {
+  background-color: #d97706;
+  color: #ffffff;
+}
+
+.diff-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.diff-hint {
+  font-size: 13px;
+  color: #92400e;
+}
+
+/* 差分表示エリア */
+.diff-view {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.diff-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.diff-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid #e5e7eb;
+}
+
+.diff-panel:last-child {
+  border-right: none;
+}
+
+.diff-panel-header {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.diff-panel-header-base {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-bottom: 1px solid #fecaca;
+}
+
+.diff-panel-header-current {
+  background-color: #dcfce7;
+  color: #166534;
+  border-bottom: 1px solid #bbf7d0;
+}
+
+.diff-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* 差分行 */
+.diff-line {
+  display: flex;
+  min-height: 20px;
+}
+
+.diff-line-num {
+  width: 48px;
+  padding: 0 8px;
+  text-align: right;
+  color: #9ca3af;
+  background-color: #f9fafb;
+  border-right: 1px solid #e5e7eb;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.diff-line-content {
+  flex: 1;
+  padding: 0 8px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.diff-line-unchanged {
+  background-color: #ffffff;
+}
+
+.diff-line-added {
+  background-color: #dcfce7;
+}
+
+.diff-line-added .diff-line-num {
+  background-color: #bbf7d0;
+  color: #166534;
+}
+
+.diff-line-added .diff-line-content {
+  color: #166534;
+}
+
+.diff-line-removed {
+  background-color: #fee2e2;
+}
+
+.diff-line-removed .diff-line-num {
+  background-color: #fecaca;
+  color: #991b1b;
+}
+
+.diff-line-removed .diff-line-content {
+  color: #991b1b;
+}
+
+.diff-line-empty {
+  background-color: #f3f4f6;
+}
+
+.diff-line-empty .diff-line-num {
+  background-color: #e5e7eb;
+}
+
+/* content-area: モバイル用タブ + content-wrapper を縦に積むラッパー */
+.content-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* デスクトップではモバイル用タブは非表示 */
+.mobile-pane-tabs {
+  display: none;
+}
+
+/* スマホ表示用: 1ペイン + 上部タブ切替 */
+@media (max-width: 768px) {
+  /* -write 有効時のみ表示するタブ（hidden クラスで JS から制御） */
+  .mobile-pane-tabs:not(.hidden) {
+    display: flex;
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    flex-shrink: 0;
+  }
+
+  .mobile-pane-tab {
+    flex: 1;
+    padding: 10px 12px;
+    border: none;
+    border-bottom: 2px solid transparent;
+    background-color: transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #6b7280;
+  }
+
+  .mobile-pane-tab.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+    font-weight: 500;
+  }
+
+  /* スマホ時はペイン間リサイザを無効化 */
+  .pane-resizer {
+    display: none !important;
+  }
+
+  /* 1ペインのみ表示。content-wrapper のクラスでどちらを表示するかを制御 */
+  .content-wrapper .pane-read,
+  .content-wrapper .pane-write {
+    flex: 1 1 100% !important;
+    min-width: 0;
+  }
+  .content-wrapper.mobile-show-write .pane-read {
+    display: none !important;
+  }
+  .content-wrapper:not(.mobile-show-write) .pane-write {
+    display: none !important;
+  }
+
+  /* スマホ時のサイドバーは画面いっぱいに重ねず、開いている時だけ画面の一部を占める。
+   * 既存のサイドバー幅は保持しつつ、最大幅を画面幅に抑える */
+  .sidebar {
+    max-width: 80vw;
+  }
+}
