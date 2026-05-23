@@ -923,7 +923,8 @@ function initDocLinkInterceptor() {
 }
 
 async function copyTextToClipboard(text) {
-  if (!text) throw new Error('copy text is empty');
+  if (text == null) throw new Error('copy text is missing');
+  text = String(text);
 
   if (navigator.clipboard && window.isSecureContext) {
     await navigator.clipboard.writeText(text);
@@ -961,28 +962,85 @@ function showCopyButtonStatus(btn, message, isError = false) {
   }, 1500);
 }
 
-async function copyReadFilename() {
+function setPathCopyIconEnabled(icon, enabled) {
+  if (!icon) return;
+  icon.classList.toggle('disabled', !enabled);
+  icon.setAttribute('aria-disabled', String(!enabled));
+  icon.tabIndex = enabled ? 0 : -1;
+}
+
+function showPathCopyIconStatus(icon, message, isError = false) {
+  if (!icon) return;
+  const original = icon.dataset.defaultTitle || icon.title || icon.getAttribute('aria-label') || '';
+  icon.dataset.defaultTitle = original;
+  icon.title = message;
+  icon.setAttribute('aria-label', message);
+  icon.classList.toggle('copied', !isError);
+  icon.classList.toggle('copy-error', isError);
+  clearTimeout(showPathCopyIconStatus._timers?.[icon.id]);
+  showPathCopyIconStatus._timers = showPathCopyIconStatus._timers || {};
+  showPathCopyIconStatus._timers[icon.id] = setTimeout(() => {
+    icon.title = original;
+    icon.setAttribute('aria-label', original);
+    icon.classList.remove('copied', 'copy-error');
+  }, 1500);
+}
+
+function handlePathCopyIconKeydown(event, copyFn) {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  event.preventDefault();
+  copyFn().catch(() => {});
+}
+
+async function copyReadPath() {
   if (!currentDocument) return;
-  const btn = document.getElementById('read-copy-btn');
+  const icon = document.getElementById('read-path-copy-icon');
   const filename = document.getElementById('read-filename')?.textContent || currentDocument;
   try {
     await copyTextToClipboard(filename);
+    showPathCopyIconStatus(icon, 'ファイルパスをコピーしました');
+  } catch (e) {
+    console.error('ファイルパスのコピーに失敗しました:', e);
+    showPathCopyIconStatus(icon, 'ファイルパスのコピーに失敗しました', true);
+  }
+}
+
+async function copyWritePath() {
+  if (!currentEditFile) return;
+  const icon = document.getElementById('edit-path-copy-icon');
+  const filename = document.getElementById('edit-filename')?.textContent || currentEditFile;
+  try {
+    await copyTextToClipboard(filename);
+    showPathCopyIconStatus(icon, 'ファイルパスをコピーしました');
+  } catch (e) {
+    console.error('ファイルパスのコピーに失敗しました:', e);
+    showPathCopyIconStatus(icon, 'ファイルパスのコピーに失敗しました', true);
+  }
+}
+
+async function copyReadContent() {
+  if (!currentDocument) return;
+  const btn = document.getElementById('read-copy-btn');
+  try {
+    const res = await fetch(rawFileURL(currentDocument, currentReadRoot));
+    if (!res.ok) throw new Error('raw file fetch failed');
+    await copyTextToClipboard(await res.text());
     showCopyButtonStatus(btn, 'コピーしました');
   } catch (e) {
-    console.error('ファイル名のコピーに失敗しました:', e);
+    console.error('ファイル内容のコピーに失敗しました:', e);
     showCopyButtonStatus(btn, 'コピー失敗', true);
   }
 }
 
-async function copyWriteFilename() {
+async function copyWriteContent() {
   if (!currentEditFile) return;
   const btn = document.getElementById('edit-copy-btn');
-  const filename = document.getElementById('edit-filename')?.textContent || currentEditFile;
+  const textarea = document.getElementById('edit-textarea');
   try {
-    await copyTextToClipboard(filename);
+    await copyTextToClipboard(textarea?.value || '');
     showCopyButtonStatus(btn, 'コピーしました');
   } catch (e) {
-    console.error('ファイル名のコピーに失敗しました:', e);
+    console.error('ファイル内容のコピーに失敗しました:', e);
     showCopyButtonStatus(btn, 'コピー失敗', true);
   }
 }
@@ -1941,6 +1999,7 @@ async function loadEditFile(path) {
     filenameEl.textContent = root && root.name ? `${root.name}/${path}` : path;
     const copyBtn = document.getElementById('edit-copy-btn');
     if (copyBtn) copyBtn.disabled = false;
+    setPathCopyIconEnabled(document.getElementById('edit-path-copy-icon'), true);
     empty.classList.add('hidden');
     textarea.classList.remove('hidden');
     saveBtn.disabled = true; // 開いた直後は dirty=false
@@ -2164,15 +2223,18 @@ function clearSelection() {
 function updateReadHeader(path) {
   const nameEl = document.getElementById('read-filename');
   const btn = document.getElementById('read-copy-btn');
+  const pathCopyIcon = document.getElementById('read-path-copy-icon');
   if (!nameEl || !btn) return;
   if (path) {
     nameEl.textContent = path;
     nameEl.title = path;
     btn.disabled = false;
+    setPathCopyIconEnabled(pathCopyIcon, true);
   } else {
     nameEl.textContent = 'ファイルを選択してください';
     nameEl.removeAttribute('title');
     btn.disabled = true;
+    setPathCopyIconEnabled(pathCopyIcon, false);
   }
 }
 
