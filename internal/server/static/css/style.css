@@ -434,8 +434,10 @@ body.resizing-sidebar-section {
   font-size: 14px;
   padding: 4px 8px;
   border-radius: 4px;
+  color: inherit;
   cursor: pointer;
   user-select: none;
+  text-decoration: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
