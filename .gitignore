@@ -14,6 +14,7 @@ reader
 
 # Local config
 config.json
+.codex/
 
 # Test and profiling output
 coverage.out
