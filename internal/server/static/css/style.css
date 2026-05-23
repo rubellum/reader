@@ -835,14 +835,62 @@ body.resizing-pane {
   flex-shrink: 0;
 }
 
-.pane-filename {
+.pane-filename-group {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pane-filename {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
   color: #374151;
+}
+
+.pane-path-copy-icon {
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+
+.pane-path-copy-icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.pane-path-copy-icon:hover:not(.disabled) {
+  color: #2563eb;
+  background-color: #e0ecff;
+}
+
+.pane-path-copy-icon:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.pane-path-copy-icon.disabled {
+  color: #d1d5db;
+  cursor: default;
+  pointer-events: none;
+}
+
+.pane-path-copy-icon.copied {
+  color: #10b981;
+}
+
+.pane-path-copy-icon.copy-error {
+  color: #b91c1c;
 }
 
 .edit-status {
