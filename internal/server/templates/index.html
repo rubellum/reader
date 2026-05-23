@@ -68,8 +68,16 @@
       <!-- 左ペイン: 閲覧（既存の Markdown 表示） -->
       <section class="pane pane-read" id="pane-read">
         <div class="pane-header">
-          <span class="pane-filename" id="read-filename">ファイルを選択してください</span>
-          <button class="pane-header-btn" id="read-copy-btn" onclick="copyReadFilename().catch(()=>{})" title="ファイル名をコピー" disabled>コピー</button>
+          <span class="pane-filename-group">
+            <span class="pane-filename" id="read-filename">ファイルを選択してください</span>
+            <span class="pane-path-copy-icon disabled" id="read-path-copy-icon" role="button" tabindex="-1" onclick="copyReadPath().catch(()=>{})" onkeydown="handlePathCopyIconKeydown(event, copyReadPath)" title="ファイルパスをコピー" aria-label="ファイルパスをコピー" aria-disabled="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </span>
+          </span>
+          <button class="pane-header-btn" id="read-copy-btn" onclick="copyReadContent().catch(()=>{})" title="ファイルの内容をコピー" disabled>コピー</button>
         </div>
 
         <div class="diff-button-bar hidden" id="diff-button-bar">
@@ -108,8 +116,16 @@
       <!-- 右ペイン: 編集（-write 指定時のみ表示） -->
       <section class="pane pane-write hidden" id="pane-write">
         <div class="pane-header">
-          <span class="pane-filename" id="edit-filename">ファイルを選択してください</span>
-          <button class="pane-header-btn" id="edit-copy-btn" onclick="copyWriteFilename().catch(()=>{})" title="ファイル名をコピー" disabled>コピー</button>
+          <span class="pane-filename-group">
+            <span class="pane-filename" id="edit-filename">ファイルを選択してください</span>
+            <span class="pane-path-copy-icon disabled" id="edit-path-copy-icon" role="button" tabindex="-1" onclick="copyWritePath().catch(()=>{})" onkeydown="handlePathCopyIconKeydown(event, copyWritePath)" title="ファイルパスをコピー" aria-label="ファイルパスをコピー" aria-disabled="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </span>
+          </span>
+          <button class="pane-header-btn" id="edit-copy-btn" onclick="copyWriteContent().catch(()=>{})" title="ファイルの内容をコピー" disabled>コピー</button>
           <span class="edit-status hidden" id="edit-status"></span>
           <button class="pane-header-btn" id="edit-save-btn" onclick="saveCurrentEdit().catch(()=>{})" disabled>保存</button>
         </div>
