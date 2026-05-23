@@ -181,7 +181,6 @@ func main() {
 		fmt.Println()
 		fmt.Println("Note:")
 		fmt.Println("  Git リポジトリ必須。git ls-files で管理されたファイルのみ表示します。")
-		fmt.Println("  複数の worktree がある場合、全 worktree のファイルが統合表示されます。")
 		fmt.Println("  -include / -exclude のいずれも未指定時はデフォルト (*.md, *.txt と")
 		fmt.Println("  node_modules/vendor などの定番除外) が適用されます。")
 	}
@@ -287,7 +286,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Git リポジトリの検出（worktree/diff 機能の前提）
+	// Git リポジトリの検出（diff 機能の前提）
 	gitRoot, err := worktree.GitRoot(targetDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: Git リポジトリではありません: %s\n", targetDir)
