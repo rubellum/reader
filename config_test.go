@@ -19,6 +19,7 @@ func TestLoadConfig_AllFields(t *testing.T) {
 		"read-r": "/tmp/reference-desc",
 		"write": "/tmp/notes",
 		"write-r": "/tmp/notes-desc",
+		"archive": "archived",
 		"verbosity": 2,
 		"dir": "/tmp/repo"
 	}`
@@ -54,6 +55,9 @@ func TestLoadConfig_AllFields(t *testing.T) {
 	}
 	if cfg.WriteR == nil || *cfg.WriteR != "/tmp/notes-desc" {
 		t.Errorf("write-r = %v, want /tmp/notes-desc", cfg.WriteR)
+	}
+	if cfg.Archive == nil || *cfg.Archive != "archived" {
+		t.Errorf("archive = %v, want archived", cfg.Archive)
 	}
 	if cfg.Verbosity == nil || *cfg.Verbosity != 2 {
 		t.Errorf("verbosity = %v, want 2", cfg.Verbosity)
