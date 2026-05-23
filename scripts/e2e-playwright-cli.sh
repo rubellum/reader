@@ -50,6 +50,7 @@ printf '# zeta read A\n' > "${read_a}/zeta.md"
 printf '# docs alpha read A\n' > "${read_a}/docs/alpha.md"
 printf '# docs zeta read A\n' > "${read_a}/docs/zeta.md"
 printf '# beta read B\n' > "${read_b}/beta.md"
+printf '<!doctype html><title>page</title>\n' > "${read_b}/page.html"
 printf '# alpha write A\n' > "${write_a}/alpha.md"
 printf '# zeta write A\n' > "${write_a}/zeta.md"
 printf '# beta write B\n' > "${write_b}/beta.md"
@@ -57,6 +58,7 @@ printf '# beta write B\n' > "${write_b}/beta.md"
 (
 	cd "${ROOT_DIR}"
 	go run . -no-open -host 127.0.0.1 -port "${port}" \
+		-include "*.md" -include "*.html" \
 		-read-r "${read_a}" -read "${read_b}" \
 		-write-r "${write_a}" -write "${write_b}" \
 		"${repo}"
@@ -118,6 +120,10 @@ initial_json="$(
 		writeRoots: Array.from(document.querySelectorAll('#write-file-list > .root-accordion .root-accordion-label')).map(e => e.textContent.trim()),
 		firstReadFiles: Array.from(document.querySelectorAll('#read-root-file-list-read .file-item .file-name')).map(e => e.textContent.trim()),
 		secondReadFiles: Array.from(document.querySelectorAll('#read-root-file-list-read-2 .file-item .file-name')).map(e => e.textContent.trim()),
+		secondReadHtmlLink: (() => {
+			const el = document.querySelector('#read-root-file-list-read-2 a.file-item[data-path=\"page.html\"]');
+			return el && { href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel') };
+		})(),
 		firstWriteFiles: Array.from(document.querySelectorAll('#write-root-file-list-write .file-item .file-name')).map(e => e.textContent.trim()),
 		secondWriteFiles: Array.from(document.querySelectorAll('#write-root-file-list-write-2 .file-item .file-name')).map(e => e.textContent.trim()),
 		firstReadDirLabels: Array.from(document.querySelectorAll('#read-root-file-list-read .dir-label')).map(e => e.textContent.trim()),
@@ -144,7 +150,10 @@ assert(eq(r.sectionTitles, ["readings", "writings"]), "section bars should be si
 assert(eq(r.readRoots, ["read-a", "read-b"]), "read accordions should follow command order");
 assert(eq(r.writeRoots, ["write-a", "write-b"]), "write accordions should follow command order");
 assert(eq(r.firstReadFiles, ["zeta.md", "alpha.md", "zeta.md", "alpha.md"]), "read-r tree should be descending");
-assert(eq(r.secondReadFiles, ["beta.md"]), "second read tree should render");
+assert(eq(r.secondReadFiles, ["beta.md", "page.html"]), "second read tree should render");
+assert(r.secondReadHtmlLink && r.secondReadHtmlLink.href === "/api/raw?path=page.html&root=read-2", "html files in read sidebar should link to raw file");
+assert(r.secondReadHtmlLink.target === "_blank", "html sidebar links should open in a new tab");
+assert(r.secondReadHtmlLink.rel === "noopener noreferrer", "html sidebar links should protect the opener");
 assert(eq(r.firstWriteFiles, ["zeta.md", "alpha.md"]), "write-r tree should be descending");
 assert(eq(r.secondWriteFiles, ["beta.md"]), "second write tree should render");
 assert(eq(r.firstReadDirLabels, ["▶docs/"]), "read root name should not be duplicated inside first read accordion");
