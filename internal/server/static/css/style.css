@@ -88,6 +88,49 @@ body.resizing-sidebar {
   gap: 8px;
 }
 
+.sidebar-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.pane-toggle-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.pane-panel-toggle {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  color: #9ca3af;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.pane-panel-toggle:hover {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+.pane-panel-toggle.active {
+  color: #ffffff;
+  background-color: #2563eb;
+  border-color: #2563eb;
+}
+
+.pane-panel-toggle.active:hover {
+  background-color: #1d4ed8;
+  border-color: #1d4ed8;
+}
+
 .sidebar-toggle,
 .sidebar-open-btn {
   background: none;
@@ -434,8 +477,10 @@ body.resizing-sidebar-section {
   font-size: 14px;
   padding: 4px 8px;
   border-radius: 4px;
+  color: inherit;
   cursor: pointer;
   user-select: none;
+  text-decoration: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -481,6 +526,21 @@ body.resizing-sidebar-section {
 
 .pane-write {
   border-left: 1px solid #e5e7eb;
+}
+
+.content-wrapper.collapse-read-pane .pane-resizer,
+.content-wrapper.collapse-write-pane .pane-resizer {
+  display: none !important;
+}
+
+.content-wrapper.collapse-read-pane .pane-read,
+.content-wrapper.collapse-write-pane .pane-write {
+  display: none !important;
+}
+
+.content-wrapper.collapse-read-pane .pane-write,
+.content-wrapper.collapse-write-pane .pane-read {
+  flex: 1 1 100% !important;
 }
 
 /* 閲覧/編集ペイン間のリサイズハンドル */
@@ -656,7 +716,7 @@ body.resizing-pane {
 .pane-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   padding: 6px 16px;
   background-color: #f9fafb;
   border-bottom: 1px solid #e5e7eb;

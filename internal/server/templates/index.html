@@ -12,6 +12,10 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <span class="sidebar-title">reader</span>
+        <span class="pane-toggle-group hidden" id="pane-toggle-group">
+          <button type="button" class="pane-panel-toggle" id="toggle-read-pane-btn" onclick="toggleContentPane('read')" title="readパネルを非表示" aria-label="readパネルを非表示">R</button>
+          <button type="button" class="pane-panel-toggle" id="toggle-write-pane-btn" onclick="toggleContentPane('write')" title="writeパネルを非表示" aria-label="writeパネルを非表示">W</button>
+        </span>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="サイドバーを開閉">‹</button>
       </div>
       <div class="sidebar-filter">

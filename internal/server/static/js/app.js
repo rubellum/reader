@@ -17,6 +17,8 @@ let writeEnabled = false;
 let currentEditFile = null;
 let currentEditRoot = 'write';
 let editDirty = false;
+let readPaneCollapsed = false;
+let writePaneCollapsed = false;
 const collapsedWriteDirs = new Set();
 const collapsedWriteDirsByRoot = {};
 
@@ -85,6 +87,19 @@ function collapsedWriteSetForRoot(rootId) {
     collapsedWriteDirsByRoot[rootId] = new Set();
   }
   return collapsedWriteDirsByRoot[rootId];
+}
+
+function isHTMLFilePath(path) {
+  return typeof path === 'string' && /\.html?$/i.test(path);
+}
+
+function rawFileURL(path, rootName, worktreeName) {
+  let url = `/api/raw?path=${encodeURIComponent(path)}`;
+  url = appendRootQuery(url, rootName);
+  if (worktreeName) {
+    url += `&worktree=${encodeURIComponent(worktreeName)}`;
+  }
+  return url;
 }
 
 // パスの簡易バリデーション（多層防御）
@@ -291,20 +306,27 @@ function applyWriteEnabledLayout() {
   const paneResizer = document.getElementById('pane-resizer');
   const mobileTabs = document.getElementById('mobile-pane-tabs');
   const sectionResizer = document.getElementById('sidebar-section-resizer');
+  const paneToggleGroup = document.getElementById('pane-toggle-group');
   if (writeEnabled) {
     writeSection.classList.remove('hidden');
     writePane.classList.remove('hidden');
     if (paneResizer) paneResizer.classList.remove('hidden');
     if (mobileTabs) mobileTabs.classList.remove('hidden');
+    if (paneToggleGroup) paneToggleGroup.classList.remove('hidden');
     setSidebarSectionHidden('write', lsGet(WRITE_SECTION_HIDDEN_KEY) === '1');
     restoreSidebarSplit();
+    restorePaneCollapseState();
   } else {
     writeSection.classList.add('hidden');
     writeSection.classList.remove('section-hidden');
     writePane.classList.add('hidden');
     if (paneResizer) paneResizer.classList.add('hidden');
     if (mobileTabs) mobileTabs.classList.add('hidden');
-    // 編集ペインを隠したらサイズ指定もクリア（pane-read を 100% に戻す）
+    if (paneToggleGroup) paneToggleGroup.classList.add('hidden');
+    readPaneCollapsed = false;
+    writePaneCollapsed = false;
+    updatePaneCollapseLayout();
+    // 編集ペインが無効ならサイズ指定もクリア（pane-read を 100% に戻す）
     const readPane = document.getElementById('pane-read');
     if (readPane) readPane.style.flex = '';
   }
@@ -378,6 +400,8 @@ function toggleSidebarSection(name) {
 function setMobilePane(pane) {
   const wrapper = document.querySelector('.content-wrapper');
   if (!wrapper) return;
+  if (pane === 'read' && readPaneCollapsed && !writePaneCollapsed) pane = 'write';
+  if (pane === 'write' && writePaneCollapsed && !readPaneCollapsed) pane = 'read';
   if (pane === 'write') {
     wrapper.classList.add('mobile-show-write');
   } else {
@@ -386,6 +410,82 @@ function setMobilePane(pane) {
   document.querySelectorAll('.mobile-pane-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.pane === pane);
   });
+}
+
+function restorePaneCollapseState() {
+  if (!writeEnabled) {
+    readPaneCollapsed = false;
+    writePaneCollapsed = false;
+  } else {
+    readPaneCollapsed = lsGet(READ_PANE_COLLAPSED_KEY) === '1';
+    writePaneCollapsed = lsGet(WRITE_PANE_COLLAPSED_KEY) === '1';
+  }
+  updatePaneCollapseLayout();
+}
+
+function persistPaneCollapseState() {
+  if (readPaneCollapsed) lsSet(READ_PANE_COLLAPSED_KEY, '1');
+  else lsRemove(READ_PANE_COLLAPSED_KEY);
+  if (writePaneCollapsed) lsSet(WRITE_PANE_COLLAPSED_KEY, '1');
+  else lsRemove(WRITE_PANE_COLLAPSED_KEY);
+}
+
+function updatePaneCollapseLayout() {
+  const wrapper = document.querySelector('.content-wrapper');
+  const readBtn = document.getElementById('toggle-read-pane-btn');
+  const writeBtn = document.getElementById('toggle-write-pane-btn');
+  const paneResizer = document.getElementById('pane-resizer');
+  if (!wrapper) return;
+
+  if (!writeEnabled) {
+    wrapper.classList.remove('collapse-read-pane', 'collapse-write-pane');
+    return;
+  }
+
+  wrapper.classList.toggle('collapse-read-pane', readPaneCollapsed);
+  wrapper.classList.toggle('collapse-write-pane', writePaneCollapsed);
+
+  if (readBtn) {
+    readBtn.textContent = 'R';
+    readBtn.title = readPaneCollapsed ? 'readパネルを表示' : 'readパネルを非表示';
+    readBtn.setAttribute('aria-label', readBtn.title);
+    readBtn.setAttribute('aria-pressed', String(!readPaneCollapsed));
+    readBtn.classList.toggle('active', !readPaneCollapsed);
+  }
+  if (writeBtn) {
+    writeBtn.textContent = 'W';
+    writeBtn.title = writePaneCollapsed ? 'writeパネルを表示' : 'writeパネルを非表示';
+    writeBtn.setAttribute('aria-label', writeBtn.title);
+    writeBtn.setAttribute('aria-pressed', String(!writePaneCollapsed));
+    writeBtn.classList.toggle('active', !writePaneCollapsed);
+  }
+  if (paneResizer) {
+    paneResizer.classList.toggle('hidden', readPaneCollapsed || writePaneCollapsed);
+  }
+
+  if (readPaneCollapsed) setMobilePane('write');
+  else if (writePaneCollapsed) setMobilePane('read');
+}
+
+function setContentPaneCollapsed(name, collapsed) {
+  if (!writeEnabled) return;
+
+  if (name === 'read') {
+    readPaneCollapsed = collapsed;
+  } else {
+    writePaneCollapsed = collapsed;
+  }
+
+  persistPaneCollapseState();
+  updatePaneCollapseLayout();
+}
+
+function toggleContentPane(name) {
+  if (name === 'read') {
+    setContentPaneCollapsed('read', !readPaneCollapsed);
+  } else {
+    setContentPaneCollapsed('write', !writePaneCollapsed);
+  }
 }
 
 // ツリーをフラット化してルート相対のディレクトリごとにグループ化
@@ -422,11 +522,21 @@ function flattenTree(item) {
   return groups;
 }
 
-function appendFileItems(container, files, keyword, onSelectFile) {
+function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
+  const htmlFilesOpenInNewTab = !!opts.htmlFilesOpenInNewTab;
+  const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
+  const rawLinkWorktree = opts.rawLinkWorktree || null;
+
   files.forEach(file => {
-    const fileItem = document.createElement('div');
+    const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
+    const fileItem = document.createElement(isHTMLLink ? 'a' : 'div');
     fileItem.className = 'file-item';
     fileItem.dataset.path = file.path;
+    if (isHTMLLink) {
+      fileItem.href = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree);
+      fileItem.target = '_blank';
+      fileItem.rel = 'noopener noreferrer';
+    }
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'file-name';
@@ -437,9 +547,11 @@ function appendFileItems(container, files, keyword, onSelectFile) {
     }
     fileItem.appendChild(nameSpan);
 
-    fileItem.addEventListener('click', () => {
-      onSelectFile(file.path, fileItem);
-    });
+    if (!isHTMLLink) {
+      fileItem.addEventListener('click', () => {
+        onSelectFile(file.path, fileItem);
+      });
+    }
     container.appendChild(fileItem);
   });
 }
@@ -460,6 +572,11 @@ function renderFileList(data, container, opts = {}) {
   const onCollapsedChange = opts.onCollapsedChange || (() => {});
   const sortDesc = !!opts.sortDesc;
   const enableDirFilterLinks = opts.enableDirFilterLinks !== false;
+  const appendFileOptions = {
+    htmlFilesOpenInNewTab: !!opts.htmlFilesOpenInNewTab,
+    rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
+    rawLinkWorktree: opts.rawLinkWorktree || null,
+  };
 
   container.innerHTML = '';
   const groups = flattenTree(data);
@@ -539,7 +656,7 @@ function renderFileList(data, container, opts = {}) {
     files = files.slice().sort((a, b) => sortDesc ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name));
 
     if (dirPath === '') {
-      appendFileItems(container, files, keyword, onSelectFile);
+      appendFileItems(container, files, keyword, onSelectFile, appendFileOptions);
       return;
     }
 
@@ -604,7 +721,7 @@ function renderFileList(data, container, opts = {}) {
     groupDiv.appendChild(label);
 
     // ファイル一覧
-    appendFileItems(groupDiv, files, keyword, onSelectFile);
+    appendFileItems(groupDiv, files, keyword, onSelectFile, appendFileOptions);
 
     container.appendChild(groupDiv);
   });
@@ -861,6 +978,8 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     enableDirFilterLinks: root.id === firstReadRootId(),
     onCollapsedChange: () => updateToggleAllReadButton(root.id),
     sortDesc: root.sortDesc,
+    htmlFilesOpenInNewTab: true,
+    rawLinkRoot: root.id,
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
   updateToggleAllReadButton(root.id);
@@ -1149,6 +1268,8 @@ const PANE_MIN_WIDTH = 200;
 const SIDEBAR_COLLAPSED_KEY = 'reader.sidebarCollapsed';
 const READ_SECTION_HIDDEN_KEY = 'reader.readSectionHidden';
 const WRITE_SECTION_HIDDEN_KEY = 'reader.writeSectionHidden';
+const READ_PANE_COLLAPSED_KEY = 'reader.readPaneCollapsed';
+const WRITE_PANE_COLLAPSED_KEY = 'reader.writePaneCollapsed';
 const SIDEBAR_SPLIT_RATIO_KEY = 'reader.sidebarSplitRatio';
 const COLLAPSED_DIRS_KEY = 'reader.collapsedDirs';
 const COLLAPSED_WRITE_DIRS_KEY = 'reader.collapsedWriteDirs';
