@@ -93,6 +93,19 @@ function collapsedWriteSetForRoot(rootId) {
   return collapsedWriteDirsByRoot[rootId];
 }
 
+function isHTMLFilePath(path) {
+  return typeof path === 'string' && /\.html?$/i.test(path);
+}
+
+function rawFileURL(path, rootName, worktreeName) {
+  let url = `/api/raw?path=${encodeURIComponent(path)}`;
+  url = appendRootQuery(url, rootName);
+  if (worktreeName) {
+    url += `&worktree=${encodeURIComponent(worktreeName)}`;
+  }
+  return url;
+}
+
 // パスの簡易バリデーション（多層防御）
 function isValidPath(path) {
   if (!path || typeof path !== 'string') return false;
@@ -645,11 +658,21 @@ function flattenTree(item) {
   return groups;
 }
 
-function appendFileItems(container, files, keyword, worktreeCount, onSelectFile) {
+function appendFileItems(container, files, keyword, worktreeCount, onSelectFile, opts = {}) {
+  const htmlFilesOpenInNewTab = !!opts.htmlFilesOpenInNewTab;
+  const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
+  const rawLinkWorktree = opts.rawLinkWorktree ?? currentWorktree;
+
   files.forEach(file => {
-    const fileItem = document.createElement('div');
+    const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
+    const fileItem = document.createElement(isHTMLLink ? 'a' : 'div');
     fileItem.className = 'file-item';
     fileItem.dataset.path = file.path;
+    if (isHTMLLink) {
+      fileItem.href = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree);
+      fileItem.target = '_blank';
+      fileItem.rel = 'noopener noreferrer';
+    }
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'file-name';
@@ -672,9 +695,11 @@ function appendFileItems(container, files, keyword, worktreeCount, onSelectFile)
       fileItem.appendChild(badgesContainer);
     }
 
-    fileItem.addEventListener('click', () => {
-      onSelectFile(file.path, fileItem);
-    });
+    if (!isHTMLLink) {
+      fileItem.addEventListener('click', () => {
+        onSelectFile(file.path, fileItem);
+      });
+    }
     container.appendChild(fileItem);
   });
 }
@@ -696,6 +721,11 @@ function renderFileList(data, container, opts = {}) {
   const sortDesc = !!opts.sortDesc;
   const worktreeCount = opts.worktreeCount ?? worktrees.length;
   const enableDirFilterLinks = opts.enableDirFilterLinks !== false;
+  const appendFileOptions = {
+    htmlFilesOpenInNewTab: !!opts.htmlFilesOpenInNewTab,
+    rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
+    rawLinkWorktree: opts.rawLinkWorktree ?? currentWorktree,
+  };
 
   container.innerHTML = '';
   const groups = flattenTree(data);
@@ -776,7 +806,7 @@ function renderFileList(data, container, opts = {}) {
     const totalWorktreeCount = worktreeCount;
 
     if (dirPath === '') {
-      appendFileItems(container, files, keyword, totalWorktreeCount, onSelectFile);
+      appendFileItems(container, files, keyword, totalWorktreeCount, onSelectFile, appendFileOptions);
       return;
     }
 
@@ -841,7 +871,7 @@ function renderFileList(data, container, opts = {}) {
     groupDiv.appendChild(label);
 
     // ファイル一覧
-    appendFileItems(groupDiv, files, keyword, totalWorktreeCount, onSelectFile);
+    appendFileItems(groupDiv, files, keyword, totalWorktreeCount, onSelectFile, appendFileOptions);
 
     container.appendChild(groupDiv);
   });
@@ -1104,6 +1134,9 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     onCollapsedChange: () => updateToggleAllReadButton(root.id),
     sortDesc: root.sortDesc,
     worktreeCount: (worktreesByRoot[root.id] || []).length,
+    htmlFilesOpenInNewTab: true,
+    rawLinkRoot: root.id,
+    rawLinkWorktree: root.id === currentReadRoot ? currentWorktree : null,
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
   updateToggleAllReadButton(root.id);
