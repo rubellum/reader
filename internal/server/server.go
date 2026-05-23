@@ -78,6 +78,7 @@ type Server struct {
 	writeRoots []readRoot
 	include    []string
 	exclude    []string
+	archiveDir string
 }
 
 // RootOption は1つの閲覧ルートの設定を表す。
@@ -99,6 +100,7 @@ type Options struct {
 	ReadSortDesc      bool
 	ExtraReadSortDesc bool
 	WriteSortDesc     bool
+	ArchiveDir        string
 }
 
 // NewWithOptions は閲覧用ルート、追加閲覧ルート、書き込みルートを持つServerを作成する。
@@ -112,9 +114,13 @@ func NewWithOptions(opts Options) *Server {
 	}
 
 	s := &Server{
-		echo:    e,
-		include: opts.Include,
-		exclude: opts.Exclude,
+		echo:       e,
+		include:    opts.Include,
+		exclude:    opts.Exclude,
+		archiveDir: opts.ArchiveDir,
+	}
+	if s.archiveDir == "" {
+		s.archiveDir = "archive"
 	}
 	readOpts := opts.ReadRoots
 	if len(readOpts) == 0 {
@@ -219,6 +225,7 @@ func (s *Server) setupRoutes() {
 	s.echo.GET("/api/file-meta", s.handleFileMeta)
 	s.echo.GET("/api/file", s.handleFile)
 	s.echo.PUT("/api/file", s.handleFileWrite)
+	s.echo.POST("/api/archive", s.handleArchive)
 	s.echo.GET("/api/worktrees", s.handleWorktrees)
 	s.echo.GET("/api/diff", s.handleDiff)
 	s.echo.GET("/api/raw", s.handleRaw)
@@ -251,6 +258,7 @@ func (s *Server) handleConfig(c echo.Context) error {
 		"extraReadEnabled":  len(s.readRoots) > 1,
 		"readRoots":         readRoots,
 		"writeRoots":        writeRoots,
+		"archiveDir":        s.archiveDir,
 		"readRootName":      "",
 		"readRootSortDesc":  false,
 		"writeRootSortDesc": false,
@@ -580,6 +588,76 @@ func (s *Server) handleFileWrite(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"path":       rawPath,
 		"modifiedAt": newInfo.ModTime().Unix(),
+	})
+}
+
+// handleArchive は指定パスのファイルをアーカイブフォルダへ移動する。
+// 移動先では元のフォルダパス構造を維持する。
+func (s *Server) handleArchive(c echo.Context) error {
+	rootName := c.QueryParam("root")
+	ctx, err := s.rootByName(rootName)
+	if err != nil {
+		return err
+	}
+	rawPath := c.QueryParam("path")
+	if rawPath == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "パスが指定されていません")
+	}
+	if err := validateRelativePath(rawPath); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "パスが不正です")
+	}
+
+	cleanPath := filepath.Clean(rawPath)
+	absBase, _ := filepath.Abs(ctx.basePath)
+	absSource, _ := filepath.Abs(filepath.Join(ctx.basePath, cleanPath))
+	relSource, relErr := filepath.Rel(absBase, absSource)
+	if relErr != nil || relSource == ".." || strings.HasPrefix(relSource, ".."+string(filepath.Separator)) {
+		return echo.NewHTTPError(http.StatusForbidden, "アクセスが拒否されました")
+	}
+
+	info, statErr := os.Stat(absSource)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return echo.NewHTTPError(http.StatusNotFound, "ファイルが見つかりません")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "ファイル情報の取得に失敗しました")
+	}
+	if info.IsDir() {
+		return echo.NewHTTPError(http.StatusBadRequest, "ディレクトリはアーカイブできません")
+	}
+
+	archiveBase := s.archiveDir
+	if !filepath.IsAbs(archiveBase) {
+		archiveBase = filepath.Join(ctx.basePath, archiveBase)
+	}
+	absArchiveBase, _ := filepath.Abs(archiveBase)
+	absDest, _ := filepath.Abs(filepath.Join(absArchiveBase, cleanPath))
+	relDest, relErr := filepath.Rel(absArchiveBase, absDest)
+	if relErr != nil || relDest == ".." || strings.HasPrefix(relDest, ".."+string(filepath.Separator)) {
+		return echo.NewHTTPError(http.StatusForbidden, "アクセスが拒否されました")
+	}
+	if absDest == absSource {
+		return echo.NewHTTPError(http.StatusBadRequest, "移動元と移動先が同じです")
+	}
+	if _, err := os.Stat(absDest); err == nil {
+		return echo.NewHTTPError(http.StatusConflict, "アーカイブ先に同名ファイルが既に存在します")
+	} else if !os.IsNotExist(err) {
+		return echo.NewHTTPError(http.StatusInternalServerError, "アーカイブ先の確認に失敗しました")
+	}
+	if err := os.MkdirAll(filepath.Dir(absDest), 0o755); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "アーカイブ先ディレクトリの作成に失敗しました")
+	}
+	if err := os.Rename(absSource, absDest); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "アーカイブに失敗しました")
+	}
+
+	archivedPath := absDest
+	if !filepath.IsAbs(s.archiveDir) {
+		archivedPath = filepath.Join(s.archiveDir, cleanPath)
+	}
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"path":         filepath.ToSlash(cleanPath),
+		"archivedPath": filepath.ToSlash(archivedPath),
 	})
 }
 

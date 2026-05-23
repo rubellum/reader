@@ -92,6 +92,7 @@ const (
 	defaultPort       = 3333
 	defaultHost       = "127.0.0.1"
 	defaultConfigFile = "config.json"
+	defaultArchiveDir = "archive"
 )
 
 // デフォルトパターン（include/exclude 共に未指定時に適用）
@@ -131,6 +132,7 @@ func main() {
 	var verbosity countFlag
 	flag.Var(&verbosity, "v", "詳細ログ（-v, -vv, -vvv）")
 	configPath := flag.String("config", "", "設定ファイル（JSON）。未指定時は ./config.json を自動検出")
+	archiveDir := flag.String("archive", defaultArchiveDir, "アーカイブフォルダ")
 	noOpen := flag.Bool("no-open", false, "起動時にブラウザを自動で開かない")
 
 	// カスタムUsage
@@ -161,6 +163,8 @@ func main() {
 		fmt.Println("        詳細ログ（-v, -vv, -vvv）")
 		fmt.Println("  -config string")
 		fmt.Printf("        設定ファイル（JSON）。未指定時は ./%s を自動検出\n", defaultConfigFile)
+		fmt.Println("  -archive string")
+		fmt.Printf("        アーカイブフォルダ (default %s)\n", defaultArchiveDir)
 		fmt.Println("  -no-open")
 		fmt.Println("        起動時にブラウザを自動で開かない")
 		fmt.Println()
@@ -177,6 +181,7 @@ func main() {
 		fmt.Println("  reader -read /tmp/a -read-r /tmp/b .         # 指定順で閲覧ツリーを表示（/tmp/b は降順）")
 		fmt.Println("  reader -write /tmp/notes /path/to/repo       # 編集 UI 付きで起動")
 		fmt.Println("  reader -write /tmp/a -write-r /tmp/b .       # 指定順で編集ツリーを表示（/tmp/b は降順）")
+		fmt.Println("  reader -archive archived .                   # archived/ 配下にファイルをアーカイブ")
 		fmt.Println("  reader -vvv                                  # 詳細ログを有効化")
 		fmt.Println()
 		fmt.Println("Note:")
@@ -239,6 +244,9 @@ func main() {
 				_ = writeRoots.add(*cfg.WriteR, true, "-write-r")
 			}
 		}
+		if !setFlags["archive"] && cfg.Archive != nil {
+			*archiveDir = *cfg.Archive
+		}
 		if !setFlags["v"] && cfg.Verbosity != nil {
 			verbosity = countFlag(*cfg.Verbosity)
 		}
@@ -261,6 +269,10 @@ func main() {
 	// ポート番号バリデーション
 	if *port < 1 || *port > 65535 {
 		fmt.Fprintf(os.Stderr, "エラー: ポート番号は1-65535の範囲で指定してください: %d\n", *port)
+		os.Exit(1)
+	}
+	if strings.TrimSpace(*archiveDir) == "" {
+		fmt.Fprintln(os.Stderr, "エラー: アーカイブフォルダを空にはできません")
 		os.Exit(1)
 	}
 	// パターンバリデーション
@@ -359,6 +371,7 @@ func main() {
 		Include:    effectiveInclude,
 		Exclude:    effectiveExclude,
 		Verbose:    verbosity > 0,
+		ArchiveDir: *archiveDir,
 	})
 
 	if !*noOpen {
@@ -393,6 +406,7 @@ func main() {
 	if useDefaultPatterns {
 		fmt.Println("デフォルトパターン適用中 (include: *.md, *.txt / exclude: node_modules, vendor 等)")
 	}
+	fmt.Printf("アーカイブフォルダ: %s\n", *archiveDir)
 	fmt.Println("終了するには Ctrl+C を押してください")
 
 	if err := srv.StartWithListener(listener); err != nil {

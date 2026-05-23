@@ -570,6 +570,7 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
   const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
   const rawLinkWorktree = opts.rawLinkWorktree || null;
   const isUnread = opts.isUnread || (() => false);
+  const onArchiveFile = opts.onArchiveFile || null;
 
   files.forEach(file => {
     const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
@@ -602,6 +603,28 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
     }
     fileItem.appendChild(nameSpan);
 
+    if (onArchiveFile) {
+      const archiveBtn = document.createElement('button');
+      archiveBtn.type = 'button';
+      archiveBtn.className = 'archive-file-btn';
+      archiveBtn.title = 'アーカイブ';
+      archiveBtn.setAttribute('aria-label', `${file.name} をアーカイブ`);
+      resetArchiveButton(archiveBtn, file.name);
+      archiveBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (archiveBtn.classList.contains('archive-confirming')) {
+          archiveBtn.disabled = true;
+          onArchiveFile(file.path);
+          return;
+        }
+        setArchiveButtonConfirming(archiveBtn, file.name);
+      });
+      archiveBtn.addEventListener('blur', () => resetArchiveButton(archiveBtn, file.name));
+      fileItem.addEventListener('mouseleave', () => resetArchiveButton(archiveBtn, file.name));
+      fileItem.appendChild(archiveBtn);
+    }
+
     if (!isHTMLLink) {
       fileItem.addEventListener('click', () => {
         onSelectFile(file.path, fileItem);
@@ -609,6 +632,25 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
     }
     container.appendChild(fileItem);
   });
+}
+
+const ARCHIVE_ICON_HTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M10 12h4"></path><path d="M2 3h20v5H2z"></path></svg>';
+
+function resetArchiveButton(button, fileName) {
+  if (!button) return;
+  button.disabled = false;
+  button.classList.remove('archive-confirming');
+  button.title = 'アーカイブ';
+  button.setAttribute('aria-label', `${fileName} をアーカイブ`);
+  button.innerHTML = ARCHIVE_ICON_HTML;
+}
+
+function setArchiveButtonConfirming(button, fileName) {
+  if (!button) return;
+  button.classList.add('archive-confirming');
+  button.title = '再クリックでアーカイブ';
+  button.setAttribute('aria-label', `${fileName} のアーカイブを確認`);
+  button.textContent = '確認';
 }
 
 // ファイルリスト描画。
@@ -634,6 +676,7 @@ function renderFileList(data, container, opts = {}) {
     rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
     rawLinkWorktree: opts.rawLinkWorktree || null,
     isUnread,
+    onArchiveFile: opts.onArchiveFile || null,
   };
 
   container.innerHTML = '';
@@ -1079,6 +1122,7 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     unreadOnly: unreadFilterMode === 'unread',
     htmlFilesOpenInNewTab: true,
     rawLinkRoot: root.id,
+    onArchiveFile: path => archiveFile(path, root.id),
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
   updateToggleAllReadButton(root.id);
@@ -1111,6 +1155,7 @@ function renderWriteTree(rootId = firstWriteRootId(), parentContainer = null) {
     enableDirFilterLinks: false,
     onCollapsedChange: () => updateToggleAllWriteButton(root.id),
     sortDesc: root.sortDesc,
+    onArchiveFile: path => archiveFile(path, root.id),
   });
   if (currentEditRoot === root.id && currentEditFile) restoreSelectionInElement(body, currentEditFile);
   updateToggleAllWriteButton(root.id);
@@ -1214,6 +1259,48 @@ function toggleAllWrite() {
     saveCollapsedWriteDirs(root.id);
   });
   renderAllWriteTrees();
+}
+
+async function archiveFile(path, rootId) {
+  const isWriteRoot = writeRoots.some(root => root.id === rootId);
+  if (isWriteRoot && currentEditRoot === rootId && currentEditFile === path && editDirty) {
+    try {
+      await saveCurrentEdit();
+    } catch (e) {
+      return;
+    }
+  }
+
+  try {
+    let url = `/api/archive?path=${encodeURIComponent(path)}`;
+    url = appendRootQuery(url, rootId);
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) {
+      const message = res.status === 409
+        ? 'アーカイブ先に同名ファイルが既に存在します'
+        : 'アーカイブに失敗しました';
+      window.alert(message);
+      return;
+    }
+
+    if (readRoots.some(root => root.id === rootId)) {
+      await loadTree(rootId);
+      if (currentReadRoot === rootId && currentDocument === path) {
+        clearSelection();
+        replaceURL(null);
+      }
+    }
+    if (isWriteRoot) {
+      await loadWriteTree(rootId);
+      if (currentEditRoot === rootId && currentEditFile === path) {
+        clearEditSelection();
+        replaceEditURL(null);
+      }
+    }
+  } catch (e) {
+    console.error('アーカイブに失敗しました:', e);
+    window.alert('アーカイブに失敗しました');
+  }
 }
 
 // 閲覧ツリーのファイル選択（左ペインに表示）
@@ -1975,6 +2062,31 @@ async function saveCurrentEdit({ silent = false } = {}) {
     showEditStatus('保存に失敗しました', true);
     throw e;
   }
+}
+
+function clearEditSelection() {
+  document.querySelectorAll('.sidebar-section-write .file-item.selected').forEach(el => {
+    el.classList.remove('selected');
+  });
+
+  currentEditFile = null;
+  editDirty = false;
+  const textarea = document.getElementById('edit-textarea');
+  const empty = document.getElementById('edit-empty-state');
+  const filenameEl = document.getElementById('edit-filename');
+  const saveBtn = document.getElementById('edit-save-btn');
+  const copyBtn = document.getElementById('edit-copy-btn');
+  if (textarea) {
+    textarea.value = '';
+    textarea.classList.add('hidden');
+  }
+  if (empty) empty.classList.remove('hidden');
+  if (filenameEl) {
+    filenameEl.textContent = 'ファイルを選択してください';
+    filenameEl.removeAttribute('title');
+  }
+  if (saveBtn) saveBtn.disabled = true;
+  if (copyBtn) copyBtn.disabled = true;
 }
 
 // 編集ヘッダーに一時的なステータスを表示（数秒で消える）

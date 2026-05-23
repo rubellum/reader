@@ -17,6 +17,7 @@ type Config struct {
 	ReadR     *string  `json:"read-r,omitempty"`
 	Write     *string  `json:"write,omitempty"`
 	WriteR    *string  `json:"write-r,omitempty"`
+	Archive   *string  `json:"archive,omitempty"`
 	Verbosity *int     `json:"verbosity,omitempty"`
 	Dir       *string  `json:"dir,omitempty"`
 }

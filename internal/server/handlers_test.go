@@ -531,6 +531,95 @@ func TestWriteRootDisabled(t *testing.T) {
 	}
 }
 
+func TestHandleArchive(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "path", "to"), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "path", "to", "file.md"), []byte("# file"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	srv := NewWithOptions(Options{ReadBasePath: root})
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/archive?path=path/to/file.md", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
+	}
+	if _, err := os.Stat(filepath.Join(root, "path", "to", "file.md")); !os.IsNotExist(err) {
+		t.Fatalf("source file should be moved, stat err=%v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "archive", "path", "to", "file.md"))
+	if err != nil {
+		t.Fatalf("read archived file: %v", err)
+	}
+	if string(got) != "# file" {
+		t.Fatalf("archived content = %q", string(got))
+	}
+}
+
+func TestHandleArchiveCustomDirAndConflict(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "doc.md"), []byte("# doc"), 0o644)
+	os.MkdirAll(filepath.Join(root, "done"), 0o755)
+	os.WriteFile(filepath.Join(root, "done", "doc.md"), []byte("# existing"), 0o644)
+
+	srv := NewWithOptions(Options{ReadBasePath: root, ArchiveDir: "done"})
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/archive?path=doc.md", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", resp.StatusCode)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "doc.md"))
+	if err != nil {
+		t.Fatalf("source should remain: %v", err)
+	}
+	if string(got) != "# doc" {
+		t.Fatalf("source content = %q", string(got))
+	}
+}
+
+func TestHandleArchiveWriteRoot(t *testing.T) {
+	read := t.TempDir()
+	write := t.TempDir()
+	os.WriteFile(filepath.Join(write, "draft.md"), []byte("# draft"), 0o644)
+
+	srv := NewWithOptions(Options{ReadBasePath: read, WriteBasePath: write, ArchiveDir: "arch"})
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/archive?root=write&path=draft.md", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if _, err := os.Stat(filepath.Join(write, "draft.md")); !os.IsNotExist(err) {
+		t.Fatalf("source file should be moved, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(write, "arch", "draft.md")); err != nil {
+		t.Fatalf("expected archived write file: %v", err)
+	}
+}
+
 func TestHandleFileWrite(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

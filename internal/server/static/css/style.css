@@ -560,6 +560,53 @@ body.resizing-sidebar-section {
   white-space: nowrap;
 }
 
+.archive-file-btn {
+  width: 38px;
+  height: 22px;
+  flex: 0 0 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+}
+
+.archive-file-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.file-item:hover .archive-file-btn,
+.archive-file-btn:focus-visible {
+  opacity: 1;
+}
+
+.archive-file-btn:hover {
+  background-color: #d1d5db;
+  color: #111827;
+}
+
+.archive-file-btn.archive-confirming {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.archive-file-btn.archive-confirming:hover {
+  background-color: #fee2e2;
+  color: #b91c1c;
+}
+
 .file-item:hover {
   background-color: #e5e7eb;
 }
