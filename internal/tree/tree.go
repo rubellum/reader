@@ -11,11 +11,13 @@ import (
 
 // TreeItem はツリーに表示される項目を表す
 type TreeItem struct {
-	Name      string      `json:"name"`
-	Path      string      `json:"path"`
-	IsDir     bool        `json:"isDir"`
-	Children  []*TreeItem `json:"children,omitempty"`
-	Worktrees []string    `json:"worktrees,omitempty"`
+	Name         string      `json:"name"`
+	Path         string      `json:"path"`
+	IsDir        bool        `json:"isDir"`
+	Children     []*TreeItem `json:"children,omitempty"`
+	Worktrees    []string    `json:"worktrees,omitempty"`
+	ModifiedAtMs int64       `json:"modifiedAtMs,omitempty"`
+	Size         int64       `json:"size,omitempty"`
 }
 
 // BuildOptions はツリー構築のオプション
@@ -301,9 +303,11 @@ func sortTree(item *TreeItem, desc bool) {
 // MergeTreeItemsWithOptions は2つのツリーを統合（ユニオン）し、指定された並び順で整列する。
 func MergeTreeItemsWithOptions(base *TreeItem, other *TreeItem, otherWorktree string, opts BuildOptions) *TreeItem {
 	merged := &TreeItem{
-		Name:  base.Name,
-		Path:  base.Path,
-		IsDir: base.IsDir,
+		Name:         base.Name,
+		Path:         base.Path,
+		IsDir:        base.IsDir,
+		ModifiedAtMs: base.ModifiedAtMs,
+		Size:         base.Size,
 	}
 
 	if !base.IsDir {
@@ -358,9 +362,11 @@ func boolStr(b bool) string {
 
 func deepCopyTree(item *TreeItem) *TreeItem {
 	copied := &TreeItem{
-		Name:  item.Name,
-		Path:  item.Path,
-		IsDir: item.IsDir,
+		Name:         item.Name,
+		Path:         item.Path,
+		IsDir:        item.IsDir,
+		ModifiedAtMs: item.ModifiedAtMs,
+		Size:         item.Size,
 	}
 	if item.Worktrees != nil {
 		copied.Worktrees = make([]string, len(item.Worktrees))

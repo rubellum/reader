@@ -11,6 +11,9 @@ const writeTreeDataByRoot = {};
 let currentFilterDir = null;
 let currentFilterKeyword = '';
 const collapsedReadDirsByRoot = {};
+let unreadFilterMode = 'all';
+let readState = { schema: 1, scopes: {} };
+const readMetaByScope = {};
 
 // ===== 編集側の状態（-write 指定時のみ有効） =====
 let writeEnabled = false;
@@ -173,6 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ファイル絞り込み入力の初期化
   initFileFilter();
+  initUnreadFilter();
 
   // ドキュメント内の相対リンクを SPA ナビゲーションに委譲
   initDocLinkInterceptor();
@@ -252,12 +256,51 @@ async function selectFileByPath(path) {
 // 閲覧ツリー読み込み
 async function loadTree(rootId = firstReadRootId()) {
   try {
-    const res = await fetch(appendRootQuery('/api/tree', rootId));
-    readTreeDataByRoot[rootId] = await res.json();
+    const url = appendRootQuery('/api/tree', rootId);
+    const res = await fetch(url);
+    const data = await res.json();
+    readTreeDataByRoot[rootId] = data;
+    applyTreeMetaForRoot(rootId, data);
     renderAllReadTrees();
   } catch (err) {
     console.error('ファイルリストの読み込みに失敗しました:', err);
   }
+}
+
+function readScopeKey(rootId) {
+  return rootId || firstReadRootId();
+}
+
+function extractFileMetaFromTree(treeData) {
+  const files = [];
+
+  function traverse(node) {
+    if (!node) return;
+    if (!node.isDir) {
+      if (Number(node.modifiedAtMs) > 0) {
+        files.push({
+          path: node.path,
+          modifiedAtMs: Number(node.modifiedAtMs) || 0,
+          size: Number(node.size) || 0,
+        });
+      }
+      return;
+    }
+    (node.children || []).forEach(traverse);
+  }
+
+  traverse(treeData);
+  return files;
+}
+
+function applyTreeMetaForRoot(rootId, treeData) {
+  const files = extractFileMetaFromTree(treeData);
+  const scope = readScopeKey(rootId);
+  readMetaByScope[scope] = files;
+  ensureReadScope(scope, files);
+  gcReadScope(scope, files);
+  saveReadState();
+  updateUnreadControls();
 }
 
 // 編集ツリー読み込み
@@ -526,12 +569,24 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
   const htmlFilesOpenInNewTab = !!opts.htmlFilesOpenInNewTab;
   const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
   const rawLinkWorktree = opts.rawLinkWorktree || null;
+  const isUnread = opts.isUnread || (() => false);
 
   files.forEach(file => {
     const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
     const fileItem = document.createElement(isHTMLLink ? 'a' : 'div');
     fileItem.className = 'file-item';
     fileItem.dataset.path = file.path;
+    const unread = !!isUnread(file.path);
+    if (unread) {
+      fileItem.classList.add('unread');
+      fileItem.title = '未読';
+    }
+
+    const unreadDot = document.createElement('span');
+    unreadDot.className = 'unread-dot';
+    unreadDot.setAttribute('aria-hidden', 'true');
+    fileItem.appendChild(unreadDot);
+
     if (isHTMLLink) {
       fileItem.href = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree);
       fileItem.target = '_blank';
@@ -572,10 +627,13 @@ function renderFileList(data, container, opts = {}) {
   const onCollapsedChange = opts.onCollapsedChange || (() => {});
   const sortDesc = !!opts.sortDesc;
   const enableDirFilterLinks = opts.enableDirFilterLinks !== false;
+  const isUnread = opts.isUnread || (() => false);
+  const unreadOnly = !!opts.unreadOnly;
   const appendFileOptions = {
     htmlFilesOpenInNewTab: !!opts.htmlFilesOpenInNewTab,
     rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
     rawLinkWorktree: opts.rawLinkWorktree || null,
+    isUnread,
   };
 
   container.innerHTML = '';
@@ -641,6 +699,12 @@ function renderFileList(data, container, opts = {}) {
     }
 
     let files = groups[dirPath];
+    const unreadCountInDir = files.filter(f => isUnread(f.path)).length;
+
+    if (unreadOnly) {
+      files = files.filter(f => isUnread(f.path));
+      if (files.length === 0) return;
+    }
 
     // キーワードフィルター適用（ファイル名 or パスに対する部分一致、大文字小文字区別なし）
     if (keyword) {
@@ -718,6 +782,13 @@ function renderFileList(data, container, opts = {}) {
     trailingSlash.textContent = '/';
     label.appendChild(trailingSlash);
 
+    if (unreadCountInDir > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'unread-count-badge dir-unread-count';
+      badge.textContent = String(unreadCountInDir);
+      label.appendChild(badge);
+    }
+
     groupDiv.appendChild(label);
 
     // ファイル一覧
@@ -731,6 +802,11 @@ function renderFileList(data, container, opts = {}) {
     const empty = document.createElement('div');
     empty.className = 'file-filter-empty';
     empty.textContent = `「${currentFilterKeyword}」に一致するファイルはありません`;
+    container.appendChild(empty);
+  } else if (unreadOnly && renderedFileCount === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'file-filter-empty';
+    empty.textContent = '未読ファイルはありません';
     container.appendChild(empty);
   }
 }
@@ -753,6 +829,13 @@ function renderRootAccordion(container, root, opts = {}) {
   label.className = 'root-accordion-label';
   label.textContent = root.name || root.id;
   header.appendChild(label);
+
+  if (opts.unreadCount > 0) {
+    const badge = document.createElement('span');
+    badge.className = 'unread-count-badge root-unread-count';
+    badge.textContent = String(opts.unreadCount);
+    header.appendChild(badge);
+  }
 
   const body = document.createElement('div');
   body.className = 'root-accordion-body';
@@ -956,19 +1039,33 @@ function renderAllReadTrees() {
   const container = document.getElementById('file-list');
   if (!container) return;
   container.innerHTML = '';
-  readRoots.forEach(root => renderReadTree(root.id, container));
+  let rendered = 0;
+  readRoots.forEach(root => {
+    if (renderReadTree(root.id, container)) rendered++;
+  });
+  if (unreadFilterMode === 'unread' && rendered === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'file-filter-empty';
+    empty.textContent = '未読ファイルはありません';
+    container.appendChild(empty);
+  }
+  updateUnreadControls();
 }
 
 // 閲覧ツリー描画（描画後に選択状態を復元）
 function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
   const root = readRootById(rootId);
   const data = readTreeDataByRoot[root.id];
-  if (!root || !data) return;
+  if (!root || !data) return false;
+  const scope = readScopeKey(root.id);
+  const unreadCount = unreadCountForScope(scope);
+  if (unreadFilterMode === 'unread' && unreadCount === 0) return false;
   const container = parentContainer || document.getElementById('file-list');
   const body = renderRootAccordion(container, root, {
     type: 'read',
     selected: currentReadRoot === root.id,
     collapsedSet: collapsedSetForRoot(root.id),
+    unreadCount,
   });
   renderFileList(data, body, {
     collapsedSet: collapsedSetForRoot(root.id),
@@ -978,11 +1075,14 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     enableDirFilterLinks: root.id === firstReadRootId(),
     onCollapsedChange: () => updateToggleAllReadButton(root.id),
     sortDesc: root.sortDesc,
+    isUnread: path => isPathUnread(scope, path),
+    unreadOnly: unreadFilterMode === 'unread',
     htmlFilesOpenInNewTab: true,
     rawLinkRoot: root.id,
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
   updateToggleAllReadButton(root.id);
+  return true;
 }
 
 // 編集ツリー描画
@@ -1172,6 +1272,11 @@ async function loadFile(path) {
     currentDocument = path;
     lastModifiedAt = data.modifiedAt;
     updateReadHeader(path);
+    markRead(currentReadRoot, path, {
+      path,
+      modifiedAtMs: data.modifiedAtMs || (data.modifiedAt * 1000),
+      size: data.size || 0,
+    });
 
     // 表示切り替え
     document.getElementById('empty-state').classList.add('hidden');
@@ -1212,6 +1317,13 @@ function startPolling() {
       }
 
       lastModifiedAt = data.modifiedAt;
+      if (!document.hidden) {
+        markRead(currentReadRoot, currentDocument, {
+          path: currentDocument,
+          modifiedAtMs: data.modifiedAtMs || (data.modifiedAt * 1000),
+          size: data.size || 0,
+        });
+      }
 
     } catch (err) {
       // ポーリングエラーは無視
@@ -1275,6 +1387,10 @@ const COLLAPSED_DIRS_KEY = 'reader.collapsedDirs';
 const COLLAPSED_WRITE_DIRS_KEY = 'reader.collapsedWriteDirs';
 const DIR_FILTER_KEY = 'reader.dirFilter';
 const KEYWORD_FILTER_KEY = 'reader.keywordFilter';
+const UNREAD_FILTER_MODE_KEY = 'reader.unreadFilterMode';
+const READ_STATE_KEY = 'reader.readState.v1';
+const READ_STATE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+const READ_STATE_MAX_FILES_PER_SCOPE = 5000;
 const SIDEBAR_MIN_WIDTH = 120;
 const SIDEBAR_MAX_WIDTH = 800;
 const SIDEBAR_SECTION_MIN_HEIGHT = 80;
@@ -1288,6 +1404,130 @@ function lsSet(key, value) {
 }
 function lsRemove(key) {
   try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+}
+
+function loadReadState() {
+  const raw = lsGet(READ_STATE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.schema === 1 && parsed.scopes && typeof parsed.scopes === 'object') {
+      readState = parsed;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function saveReadState() {
+  lsSet(READ_STATE_KEY, JSON.stringify(readState));
+}
+
+function ensureReadScope(scope, files = []) {
+  if (!readState.scopes) readState.scopes = {};
+  if (!readState.scopes[scope]) {
+    const maxVersion = files.reduce((max, file) => Math.max(max, Number(file.modifiedAtMs) || 0), 0);
+    readState.scopes[scope] = {
+      baselineVersionMs: maxVersion,
+      files: {},
+    };
+  }
+  if (!readState.scopes[scope].files || typeof readState.scopes[scope].files !== 'object') {
+    readState.scopes[scope].files = {};
+  }
+  return readState.scopes[scope];
+}
+
+function gcReadScope(scope, files = []) {
+  const stateScope = ensureReadScope(scope, files);
+  const existingPaths = new Set(files.map(file => file.path));
+  const cutoff = Date.now() - READ_STATE_TTL_MS;
+
+  Object.keys(stateScope.files).forEach(path => {
+    const entry = stateScope.files[path];
+    if (!existingPaths.has(path) || !entry || entry.lastReadAtMs < cutoff) {
+      delete stateScope.files[path];
+    }
+  });
+
+  const entries = Object.entries(stateScope.files);
+  if (entries.length <= READ_STATE_MAX_FILES_PER_SCOPE) return;
+  entries
+    .sort((a, b) => (a[1].lastReadAtMs || 0) - (b[1].lastReadAtMs || 0))
+    .slice(0, entries.length - READ_STATE_MAX_FILES_PER_SCOPE)
+    .forEach(([path]) => delete stateScope.files[path]);
+}
+
+function fileMetaByPath(scope, path) {
+  return (readMetaByScope[scope] || []).find(file => file.path === path) || null;
+}
+
+function versionsDiffer(a, b) {
+  if (!a || !b) return true;
+  return Number(a.modifiedAtMs) !== Number(b.modifiedAtMs) || Number(a.size) !== Number(b.size);
+}
+
+function isPathUnread(scope, path) {
+  const meta = fileMetaByPath(scope, path);
+  if (!meta) return false;
+  const stateScope = ensureReadScope(scope, readMetaByScope[scope] || []);
+  const entry = stateScope.files[path];
+  if (!entry) {
+    return Number(meta.modifiedAtMs) > Number(stateScope.baselineVersionMs || 0);
+  }
+  return versionsDiffer(meta, entry.version);
+}
+
+function unreadCountForScope(scope) {
+  return (readMetaByScope[scope] || []).reduce((count, file) => count + (isPathUnread(scope, file.path) ? 1 : 0), 0);
+}
+
+function totalUnreadCount() {
+  return readRoots.reduce((count, root) => count + unreadCountForScope(readScopeKey(root.id)), 0);
+}
+
+function markRead(rootId, path, meta = null) {
+  const scope = readScopeKey(rootId);
+  const currentMeta = meta || fileMetaByPath(scope, path);
+  if (!currentMeta) return;
+  const scopeMeta = readMetaByScope[scope] || [];
+  const idx = scopeMeta.findIndex(file => file.path === path);
+  if (idx >= 0) scopeMeta[idx] = { ...scopeMeta[idx], ...currentMeta, path };
+  else scopeMeta.push({ ...currentMeta, path });
+  readMetaByScope[scope] = scopeMeta;
+  const stateScope = ensureReadScope(scope, readMetaByScope[scope] || []);
+  const version = {
+    modifiedAtMs: Number(currentMeta.modifiedAtMs) || 0,
+    size: Number(currentMeta.size) || 0,
+  };
+  const existing = stateScope.files[path];
+  if (existing && !versionsDiffer(version, existing.version)) return;
+  stateScope.files[path] = {
+    lastReadAtMs: Date.now(),
+    version,
+  };
+  gcReadScope(scope, readMetaByScope[scope] || []);
+  saveReadState();
+  renderAllReadTrees();
+}
+
+function initUnreadFilter() {
+  const saved = lsGet(UNREAD_FILTER_MODE_KEY);
+  unreadFilterMode = saved === 'unread' ? 'unread' : 'all';
+  updateUnreadControls();
+}
+
+function setUnreadFilterMode(mode) {
+  unreadFilterMode = mode === 'unread' ? 'unread' : 'all';
+  lsSet(UNREAD_FILTER_MODE_KEY, unreadFilterMode);
+  updateUnreadControls();
+  renderAllReadTrees();
+}
+
+function updateUnreadControls() {
+  document.querySelectorAll('.unread-filter-tab').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.mode === unreadFilterMode);
+  });
+  const countEl = document.getElementById('unread-total-count');
+  if (countEl) countEl.textContent = String(totalUnreadCount());
 }
 
 // 折り畳み済みディレクトリの永続化
@@ -1312,6 +1552,7 @@ function loadCollapsedReadDirs(rootId = firstReadRootId()) {
 // 永続化された全サイドバー状態を起動時に復元する
 // （ツリー描画前にグローバルへ反映しておけば renderFileList が自動で反映する）
 function restoreSidebarPersistedState() {
+  loadReadState();
   loadCollapsedReadDirs(firstReadRootId());
   loadCollapsedWriteDirs(firstWriteRootId());
 

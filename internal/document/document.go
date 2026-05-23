@@ -14,9 +14,11 @@ import (
 
 // Document はドキュメント情報を表す
 type Document struct {
-	HTML       string `json:"html"`
-	Path       string `json:"path"`
-	ModifiedAt int64  `json:"modifiedAt"`
+	HTML         string `json:"html"`
+	Path         string `json:"path"`
+	ModifiedAt   int64  `json:"modifiedAt"`
+	ModifiedAtMs int64  `json:"modifiedAtMs"`
+	Size         int64  `json:"size"`
 }
 
 // Renderer はMarkdownをHTMLに変換する
@@ -102,8 +104,10 @@ func (r *Renderer) Render(relativePath, worktreeName string) (*Document, error) 
 	}
 
 	return &Document{
-		HTML:       metaHTML + buf.String(),
-		Path:       relativePath,
-		ModifiedAt: info.ModTime().Unix(),
+		HTML:         metaHTML + buf.String(),
+		Path:         relativePath,
+		ModifiedAt:   info.ModTime().Unix(),
+		ModifiedAtMs: info.ModTime().UnixMilli(),
+		Size:         info.Size(),
 	}, nil
 }
