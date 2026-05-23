@@ -22,18 +22,24 @@ reader [options] [directory]
 reader
 reader ./docs
 reader -port 8080 ./docs
+reader -host 0.0.0.0 -port 8080 ./docs
 reader -include "*.md" -exclude "draft/*" ./docs
+reader -read /path/to/reference -read-r /path/to/archive ./repo
 reader -write /path/to/notes ./repo
+reader -write /path/to/notes -write-r /path/to/archive ./repo
 reader -no-open ./repo
 ```
 
 ## よく使うオプション
 
+- `-host`: バインドアドレスです。デフォルトは `127.0.0.1` です。
 - `-port`: ポート番号。デフォルトは `3333` です。使用中の場合は後続の空きポートへフォールバックします。
 - `-include`: 表示するファイルの glob パターンです。複数指定できます。
 - `-exclude`: 除外するファイルの glob パターンです。複数指定できます。
 - `-read`: 閲覧ツリーに表示するディレクトリです。複数指定できます。指定時は起動ディレクトリを閲覧ツリーに表示しません。
+- `-read-r`: 閲覧ツリーに表示するディレクトリです。複数指定できます。指定したディレクトリのサイドバーの並び順を降順にします。
 - `-write`: 編集ツリーに表示するディレクトリです。複数指定できます。指定時に編集 UI が有効になります。
+- `-write-r`: 編集ツリーに表示するディレクトリです。複数指定できます。指定したディレクトリのサイドバーの並び順を降順にします。
 - `-config`: JSON 設定ファイルを指定します。未指定時は `./config.json` があれば読み込みます。
 - `-no-open`: 起動時にブラウザを自動で開きません。
 - `-v`: 詳細ログを出します。`-vv` / `-vvv` も指定できます。
@@ -46,11 +52,15 @@ CLI 未指定の値は JSON 設定ファイルから読み込めます。CLI で
 
 ```json
 {
+  "host": "127.0.0.1",
   "port": 3333,
   "include": ["*.md", "*.txt"],
   "exclude": ["draft/*"],
   "read": "/path/to/reference",
+  "read-r": "/path/to/archive",
   "write": "/path/to/notes",
+  "write-r": "/path/to/old-notes",
+  "verbosity": 1,
   "dir": "/path/to/repo"
 }
 ```
