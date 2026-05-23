@@ -1200,3 +1200,102 @@ func TestHandleTreeWorktreeMetadata(t *testing.T) {
 		t.Fatalf("expected feature-only.md worktree to be 'feature', got %s", featureOnly.Worktrees[0])
 	}
 }
+
+func TestHandleFileMeta(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "Test User")
+	runGit(t, root, "checkout", "-b", "main")
+
+	os.MkdirAll(filepath.Join(root, "docs"), 0o755)
+	os.WriteFile(filepath.Join(root, "readme.md"), []byte("# readme"), 0o644)
+	os.WriteFile(filepath.Join(root, "notes.txt"), []byte("notes"), 0o644)
+	os.WriteFile(filepath.Join(root, "docs", "guide.md"), []byte("# guide"), 0o644)
+	os.WriteFile(filepath.Join(root, "docs", "draft.md"), []byte("# draft"), 0o644)
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "init")
+
+	srv := newTestServer(root, []string{"*.md"}, []string{"docs/draft.md"}, false)
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	resp := mustGet(t, ts.URL+"/api/file-meta")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var payload struct {
+		Files []struct {
+			Path         string `json:"path"`
+			ModifiedAtMs int64  `json:"modifiedAtMs"`
+			Size         int64  `json:"size"`
+		} `json:"files"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	paths := map[string]struct{}{}
+	for _, file := range payload.Files {
+		if file.ModifiedAtMs == 0 || file.Size == 0 {
+			t.Fatalf("expected version metadata for %s: %+v", file.Path, file)
+		}
+		paths[file.Path] = struct{}{}
+	}
+	if _, ok := paths["readme.md"]; !ok {
+		t.Fatalf("expected readme.md in file metadata")
+	}
+	if _, ok := paths["docs/guide.md"]; !ok {
+		t.Fatalf("expected docs/guide.md in file metadata")
+	}
+	if _, ok := paths["notes.txt"]; ok {
+		t.Fatalf("expected notes.txt to be excluded by include pattern")
+	}
+	if _, ok := paths["docs/draft.md"]; ok {
+		t.Fatalf("expected docs/draft.md to be excluded")
+	}
+}
+
+func TestHandleTreeIncludesFileMeta(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	runGit(t, root, "init")
+	runGit(t, root, "config", "user.email", "test@example.com")
+	runGit(t, root, "config", "user.name", "Test User")
+	runGit(t, root, "checkout", "-b", "main")
+
+	os.WriteFile(filepath.Join(root, "readme.md"), []byte("# readme"), 0o644)
+	runGit(t, root, "add", ".")
+	runGit(t, root, "commit", "-m", "init")
+
+	srv := newTestServer(root, []string{"*.md"}, nil, false)
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	resp := mustGet(t, ts.URL+"/api/tree")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var data tree.TreeItem
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	item := findTreeItem(&data, "readme.md")
+	if item == nil {
+		t.Fatalf("expected readme.md in tree")
+	}
+	if item.ModifiedAtMs == 0 || item.Size == 0 {
+		t.Fatalf("expected readme.md metadata, got modifiedAtMs=%d size=%d", item.ModifiedAtMs, item.Size)
+	}
+}

@@ -18,6 +18,10 @@
         <input type="search" id="file-filter-input" class="file-filter-input" placeholder="ファイル名で絞り込み" autocomplete="off">
         <button type="button" class="file-filter-clear hidden" id="file-filter-clear" title="クリア">×</button>
       </div>
+      <div class="unread-filter-tabs" id="unread-filter-tabs" role="group" aria-label="閲覧ファイルの表示切替">
+        <button type="button" class="unread-filter-tab active" data-mode="all" onclick="setUnreadFilterMode('all')">すべて</button>
+        <button type="button" class="unread-filter-tab" data-mode="unread" onclick="setUnreadFilterMode('unread')">未読 <span id="unread-total-count">0</span></button>
+      </div>
 
       <!-- 上半分: 閲覧ツリー -->
       <div class="sidebar-section sidebar-section-read" id="sidebar-section-read">

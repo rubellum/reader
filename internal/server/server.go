@@ -216,6 +216,7 @@ func (s *Server) setupRoutes() {
 	// API
 	s.echo.GET("/api/config", s.handleConfig)
 	s.echo.GET("/api/tree", s.handleTree)
+	s.echo.GET("/api/file-meta", s.handleFileMeta)
 	s.echo.GET("/api/file", s.handleFile)
 	s.echo.PUT("/api/file", s.handleFileWrite)
 	s.echo.GET("/api/worktrees", s.handleWorktrees)
@@ -310,6 +311,7 @@ func (s *Server) handleTree(c echo.Context) error {
 		}
 		rootName := filepath.Base(ctx.basePath)
 		treeData := tree.BuildFromGitFiles(rootName, files, opts)
+		annotateTreeFileMeta(treeData, ctx.basePath)
 		return c.JSON(http.StatusOK, treeData)
 	}
 
@@ -342,6 +344,11 @@ func (s *Server) handleTree(c echo.Context) error {
 			Path:  "",
 			IsDir: true,
 		}
+	}
+
+	metaBaseDir, err := s.resolveWorktreeBaseForCtx(ctx, c.QueryParam("metaWorktree"))
+	if err == nil {
+		annotateTreeFileMeta(merged, metaBaseDir)
 	}
 
 	return c.JSON(http.StatusOK, merged)
@@ -383,6 +390,96 @@ func setWorktreesAll(item *tree.TreeItem, name string) {
 	for _, child := range item.Children {
 		setWorktreesAll(child, name)
 	}
+}
+
+func annotateTreeFileMeta(item *tree.TreeItem, baseDir string) {
+	if item == nil {
+		return
+	}
+	if !item.IsDir {
+		info, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(item.Path)))
+		if err != nil || info.IsDir() {
+			item.ModifiedAtMs = 0
+			item.Size = 0
+			return
+		}
+		item.ModifiedAtMs = info.ModTime().UnixMilli()
+		item.Size = info.Size()
+		return
+	}
+	for _, child := range item.Children {
+		annotateTreeFileMeta(child, baseDir)
+	}
+}
+
+type fileMeta struct {
+	Path         string `json:"path"`
+	ModifiedAtMs int64  `json:"modifiedAtMs"`
+	Size         int64  `json:"size"`
+}
+
+// handleFileMeta は未読判定に使うファイルバージョン情報を返す。
+// ツリーと同じ include/exclude を適用し、指定 worktree があればその worktree の実体から取得する。
+func (s *Server) handleFileMeta(c echo.Context) error {
+	rootName := c.QueryParam("root")
+	ctx, err := s.rootByName(rootName)
+	if err != nil {
+		return err
+	}
+
+	baseDir, err := s.resolveWorktreeBaseForCtx(ctx, c.QueryParam("worktree"))
+	if err != nil {
+		return err
+	}
+
+	files, err := tree.GitFiles(baseDir)
+	if err != nil {
+		files, err = buildFileListFallback(baseDir)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusInternalServerError, "ファイル一覧の取得に失敗しました")
+		}
+	}
+
+	opts := tree.BuildOptions{
+		Include:  s.include,
+		Exclude:  s.exclude,
+		SortDesc: s.sortDescByRootName(rootName),
+	}
+	treeData := tree.BuildFromGitFiles(filepath.Base(ctx.basePath), files, opts)
+	paths := collectTreeFilePaths(treeData)
+
+	metas := make([]fileMeta, 0, len(paths))
+	for _, p := range paths {
+		info, statErr := os.Stat(filepath.Join(baseDir, filepath.FromSlash(p)))
+		if statErr != nil || info.IsDir() {
+			continue
+		}
+		metas = append(metas, fileMeta{
+			Path:         p,
+			ModifiedAtMs: info.ModTime().UnixMilli(),
+			Size:         info.Size(),
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]interface{}{
+		"root":     rootName,
+		"worktree": c.QueryParam("worktree"),
+		"files":    metas,
+	})
+}
+
+func collectTreeFilePaths(item *tree.TreeItem) []string {
+	if item == nil {
+		return nil
+	}
+	if !item.IsDir {
+		return []string{item.Path}
+	}
+	var paths []string
+	for _, child := range item.Children {
+		paths = append(paths, collectTreeFilePaths(child)...)
+	}
+	return paths
 }
 
 // handleFile はドキュメントを返す
