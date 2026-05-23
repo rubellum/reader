@@ -2,9 +2,6 @@
 let currentDocument = null;
 let lastModifiedAt = null;
 let currentReadRoot = 'read';
-let currentWorktree = null;
-let worktrees = [];
-const worktreesByRoot = {};
 let isDiffMode = false;
 let currentDiffData = null;
 let readRoots = [{ id: 'read', name: '', sortDesc: false }];
@@ -32,7 +29,6 @@ function getURLParams() {
   const params = new URLSearchParams(window.location.search);
   return {
     file: params.get('file'),
-    worktree: params.get('worktree'),
     root: params.get('root'),
     editFile: params.get('editFile'),
     editRoot: params.get('editRoot')
@@ -124,41 +120,43 @@ function setOrDeleteParam(url, key, value) {
 }
 
 // URLを更新（ブラウザ履歴に追加）。editFile はグローバル currentEditFile から取り込む
-function updateURL(filePath, worktreeName) {
+function updateURL(filePath) {
   const url = new URL(window.location);
   setOrDeleteParam(url, 'file', filePath);
-  setOrDeleteParam(url, 'worktree', worktreeName);
+  url.searchParams.delete('worktree');
   setOrDeleteParam(url, 'root', currentReadRoot !== firstReadRootId() ? currentReadRoot : '');
   setOrDeleteParam(url, 'editFile', currentEditFile);
   setOrDeleteParam(url, 'editRoot', currentEditRoot !== firstWriteRootId() ? currentEditRoot : '');
-  history.pushState({ file: filePath, worktree: worktreeName, root: currentReadRoot, editFile: currentEditFile, editRoot: currentEditRoot }, '', url);
+  history.pushState({ file: filePath, root: currentReadRoot, editFile: currentEditFile, editRoot: currentEditRoot }, '', url);
 }
 
 // URLを更新（履歴に追加しない、初期読み込み用）
-function replaceURL(filePath, worktreeName) {
+function replaceURL(filePath) {
   const url = new URL(window.location);
   setOrDeleteParam(url, 'file', filePath);
-  setOrDeleteParam(url, 'worktree', worktreeName);
+  url.searchParams.delete('worktree');
   setOrDeleteParam(url, 'root', currentReadRoot !== firstReadRootId() ? currentReadRoot : '');
   setOrDeleteParam(url, 'editFile', currentEditFile);
   setOrDeleteParam(url, 'editRoot', currentEditRoot !== firstWriteRootId() ? currentEditRoot : '');
-  history.replaceState({ file: filePath, worktree: worktreeName, root: currentReadRoot, editFile: currentEditFile, editRoot: currentEditRoot }, '', url);
+  history.replaceState({ file: filePath, root: currentReadRoot, editFile: currentEditFile, editRoot: currentEditRoot }, '', url);
 }
 
 // 編集ファイル選択時の URL 更新（read 側のパラメータは現在値を維持）
 function updateEditURL(editFilePath) {
   const url = new URL(window.location);
+  url.searchParams.delete('worktree');
   setOrDeleteParam(url, 'editFile', editFilePath);
   setOrDeleteParam(url, 'editRoot', currentEditRoot !== firstWriteRootId() ? currentEditRoot : '');
-  history.pushState({ file: currentDocument, worktree: currentWorktree, root: currentReadRoot, editFile: editFilePath, editRoot: currentEditRoot }, '', url);
+  history.pushState({ file: currentDocument, root: currentReadRoot, editFile: editFilePath, editRoot: currentEditRoot }, '', url);
 }
 
 // 編集ファイル選択時の URL 置換（履歴に追加しない、初期読み込み用）
 function replaceEditURL(editFilePath) {
   const url = new URL(window.location);
+  url.searchParams.delete('worktree');
   setOrDeleteParam(url, 'editFile', editFilePath);
   setOrDeleteParam(url, 'editRoot', currentEditRoot !== firstWriteRootId() ? currentEditRoot : '');
-  history.replaceState({ file: currentDocument, worktree: currentWorktree, root: currentReadRoot, editFile: editFilePath, editRoot: currentEditRoot }, '', url);
+  history.replaceState({ file: currentDocument, root: currentReadRoot, editFile: editFilePath, editRoot: currentEditRoot }, '', url);
 }
 
 // 初期化
@@ -194,10 +192,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   ensureReadSections();
   ensureWriteSections();
 
-  for (const root of readRoots) {
-    await loadWorktrees(root.id);
-  }
-
   // ツリーを読み込み
   try {
     for (const root of readRoots) {
@@ -209,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
   } catch (error) {
-    console.error('Failed to initialize tree or worktrees:', error);
+    console.error('Failed to initialize tree:', error);
     return;
   }
 
@@ -219,14 +213,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentReadRoot = params.root;
   } else {
     currentReadRoot = firstReadRootId();
-  }
-
-  // 現在の閲覧ルートの worktree 一覧を読み込み
-  await loadWorktrees(currentReadRoot);
-
-  // worktreeの設定（URLパラメータ優先）
-  if (params.worktree && worktrees.some(wt => wt.name === params.worktree)) {
-    currentWorktree = params.worktree;
   }
 
   // ファイルの自動選択
@@ -257,130 +243,9 @@ async function selectFileByPath(path) {
     // URLを再度更新しないようにskipURLUpdate=true
     await selectFile(path, fileItem, true, currentReadRoot);
     // URLを正規化（replaceStateで履歴を上書き）
-    replaceURL(path, currentWorktree);
+    replaceURL(path);
   } else {
     console.warn('指定されたファイルがツリーに見つかりません:', path);
-  }
-}
-
-// Worktree一覧読み込み
-async function loadWorktrees(rootName = currentReadRoot) {
-  try {
-    const res = await fetch(appendRootQuery('/api/worktrees', rootName));
-    const data = await res.json();
-    const list = data.worktrees || [];
-    worktreesByRoot[rootName] = list;
-    if (rootName !== currentReadRoot) return;
-    worktrees = list;
-
-    // 現在のworktreeを設定
-    const current = worktrees.find(wt => wt.current);
-    if (current) {
-      currentWorktree = current.name;
-    }
-  } catch (err) {
-    console.error('worktree一覧の読み込みに失敗しました:', err);
-    worktreesByRoot[rootName] = [];
-    if (rootName === currentReadRoot) worktrees = [];
-  }
-}
-
-// Worktree一覧をハッシュ付きで読み込み
-async function loadWorktreesWithHashes(path, rootName = currentReadRoot) {
-  try {
-    let url = `/api/worktrees?path=${encodeURIComponent(path)}`;
-    url = appendRootQuery(url, rootName);
-    const res = await fetch(url);
-    const data = await res.json();
-    const list = data.worktrees || [];
-    worktreesByRoot[rootName] = list;
-    if (rootName !== currentReadRoot) return;
-    worktrees = list;
-    if (!worktrees.some(wt => wt.name === currentWorktree)) {
-      const current = worktrees.find(wt => wt.current);
-      currentWorktree = current ? current.name : null;
-    }
-  } catch (err) {
-    console.error('worktree一覧の読み込みに失敗しました:', err);
-  }
-}
-
-// Worktreeタブを描画（ハッシュ比較による色分け）
-function renderWorktreeTabs() {
-  const container = document.getElementById('worktree-tabs');
-
-  // worktreeが1つ以下の場合はタブを表示しない
-  if (worktrees.length <= 1) {
-    container.classList.add('hidden');
-    return;
-  }
-
-  container.innerHTML = '';
-  container.classList.remove('hidden');
-
-  // 現在のworktreeのハッシュを取得
-  const currentWt = worktrees.find(wt => wt.name === currentWorktree);
-  const currentHash = currentWt?.fileHash;
-
-  worktrees.forEach(wt => {
-    const tab = document.createElement('button');
-    tab.className = 'worktree-tab';
-    tab.textContent = wt.name;
-    tab.dataset.worktree = wt.name;
-
-    const isActive = wt.name === currentWorktree;
-    const exists = wt.fileHash !== null && wt.fileHash !== undefined;
-    const isDifferent = exists && currentHash && wt.fileHash !== currentHash;
-
-    if (!exists) {
-      // ファイル未存在: 薄いグレー + 打ち消し線
-      tab.classList.add('not-exists');
-    } else if (isActive) {
-      // アクティブ: 青
-      tab.classList.add('active');
-    } else if (isDifferent) {
-      // 内容が異なる: オレンジ
-      tab.classList.add('different');
-    }
-    // 同じ内容: デフォルトスタイル
-
-    tab.addEventListener('click', () => {
-      selectWorktree(wt.name);
-    });
-
-    container.appendChild(tab);
-  });
-}
-
-// Worktree選択
-async function selectWorktree(name, skipURLUpdate = false) {
-  if (name === currentWorktree) return;
-
-  currentWorktree = name;
-
-  isDiffMode = false;
-
-  // URLを更新（popstate時はスキップ）
-  if (!skipURLUpdate && currentDocument) {
-    updateURL(currentDocument, currentWorktree);
-  }
-
-  // 現在のドキュメントを再読み込み
-  if (currentDocument) {
-    // ハッシュ付きでworktree一覧を再読み込み（選択worktree変更後の色分け更新）
-    await loadWorktreesWithHashes(currentDocument);
-    renderWorktreeTabs();
-
-    // 差分データを読み込み
-    await loadDiff(currentDocument);
-
-    // 差分ボタンバーの表示/非表示を更新
-    updateDiffButtonBar();
-
-    // 差分表示の状態を更新
-    updateDiffView();
-
-    await loadFile(currentDocument);
   }
 }
 
@@ -636,8 +501,7 @@ function flattenTree(item) {
       }
       groups[dirPath].push({
         name: node.name,
-        path: node.path,
-        worktrees: node.worktrees || []
+        path: node.path
       });
     } else if (node.children && node.children.length > 0) {
       // ディレクトリの場合、子を再帰的に処理
@@ -658,10 +522,10 @@ function flattenTree(item) {
   return groups;
 }
 
-function appendFileItems(container, files, keyword, worktreeCount, onSelectFile, opts = {}) {
+function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
   const htmlFilesOpenInNewTab = !!opts.htmlFilesOpenInNewTab;
   const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
-  const rawLinkWorktree = opts.rawLinkWorktree ?? currentWorktree;
+  const rawLinkWorktree = opts.rawLinkWorktree || null;
 
   files.forEach(file => {
     const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
@@ -682,18 +546,6 @@ function appendFileItems(container, files, keyword, worktreeCount, onSelectFile,
       nameSpan.textContent = file.name;
     }
     fileItem.appendChild(nameSpan);
-
-    if (file.worktrees.length > 0 && file.worktrees.length < worktreeCount) {
-      const badgesContainer = document.createElement('span');
-      badgesContainer.className = 'wt-badges';
-      file.worktrees.forEach(wtName => {
-        const badge = document.createElement('span');
-        badge.className = 'wt-badge';
-        badge.textContent = wtName;
-        badgesContainer.appendChild(badge);
-      });
-      fileItem.appendChild(badgesContainer);
-    }
 
     if (!isHTMLLink) {
       fileItem.addEventListener('click', () => {
@@ -719,12 +571,11 @@ function renderFileList(data, container, opts = {}) {
   const applyDirFilter = opts.applyDirFilter !== false; // デフォルト true
   const onCollapsedChange = opts.onCollapsedChange || (() => {});
   const sortDesc = !!opts.sortDesc;
-  const worktreeCount = opts.worktreeCount ?? worktrees.length;
   const enableDirFilterLinks = opts.enableDirFilterLinks !== false;
   const appendFileOptions = {
     htmlFilesOpenInNewTab: !!opts.htmlFilesOpenInNewTab,
     rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
-    rawLinkWorktree: opts.rawLinkWorktree ?? currentWorktree,
+    rawLinkWorktree: opts.rawLinkWorktree || null,
   };
 
   container.innerHTML = '';
@@ -803,10 +654,9 @@ function renderFileList(data, container, opts = {}) {
     renderedFileCount += files.length;
 
     files = files.slice().sort((a, b) => sortDesc ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name));
-    const totalWorktreeCount = worktreeCount;
 
     if (dirPath === '') {
-      appendFileItems(container, files, keyword, totalWorktreeCount, onSelectFile, appendFileOptions);
+      appendFileItems(container, files, keyword, onSelectFile, appendFileOptions);
       return;
     }
 
@@ -871,7 +721,7 @@ function renderFileList(data, container, opts = {}) {
     groupDiv.appendChild(label);
 
     // ファイル一覧
-    appendFileItems(groupDiv, files, keyword, totalWorktreeCount, onSelectFile, appendFileOptions);
+    appendFileItems(groupDiv, files, keyword, onSelectFile, appendFileOptions);
 
     container.appendChild(groupDiv);
   });
@@ -955,7 +805,7 @@ function appendHighlightedText(parent, text, keyword) {
   }
 }
 
-// ドキュメント内の `?file=...&worktree=...` 形式リンクをクリックで SPA ナビへ委譲する。
+// ドキュメント内の `?file=...` 形式リンクをクリックで SPA ナビへ委譲する。
 // goldmark レンダ時にサーバ側で書き換えた相対リンクがこの形式になっている。
 function initDocLinkInterceptor() {
   const docEl = document.getElementById('document');
@@ -968,7 +818,7 @@ function initDocLinkInterceptor() {
     const link = e.target.closest('a');
     if (!link) return;
 
-    // クエリ文字列だけのリンクのみ対象（例: ?file=docs/x.md&worktree=main）
+    // クエリ文字列だけのリンクのみ対象（例: ?file=docs/x.md）
     const href = link.getAttribute('href') || '';
     if (!href.startsWith('?')) return;
 
@@ -977,11 +827,6 @@ function initDocLinkInterceptor() {
     if (!filePath || !isValidPath(filePath)) return;
 
     e.preventDefault();
-
-    const worktreeName = params.get('worktree');
-    if (worktreeName && worktrees.some(wt => wt.name === worktreeName) && worktreeName !== currentWorktree) {
-      await selectWorktree(worktreeName, true);
-    }
 
     await selectFileByPath(filePath);
 
@@ -1133,10 +978,8 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     enableDirFilterLinks: root.id === firstReadRootId(),
     onCollapsedChange: () => updateToggleAllReadButton(root.id),
     sortDesc: root.sortDesc,
-    worktreeCount: (worktreesByRoot[root.id] || []).length,
     htmlFilesOpenInNewTab: true,
     rawLinkRoot: root.id,
-    rawLinkWorktree: root.id === currentReadRoot ? currentWorktree : null,
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
   updateToggleAllReadButton(root.id);
@@ -1286,13 +1129,11 @@ async function selectFile(path, rowElement, skipURLUpdate = false, rootName = fi
   isDiffMode = false;
 
   if (!skipURLUpdate) {
-    updateURL(path, currentWorktree);
+    updateURL(path);
     // ユーザー操作起点ならスマホ表示で閲覧ペインに切替
     setMobilePane('read');
   }
 
-  await loadWorktreesWithHashes(path, currentReadRoot);
-  renderWorktreeTabs();
   await loadDiff(path);
   updateDiffButtonBar();
   updateDiffView();
@@ -1302,12 +1143,8 @@ async function selectFile(path, rowElement, skipURLUpdate = false, rootName = fi
 // ファイル読み込み
 async function loadFile(path) {
   try {
-    // worktreeパラメータを追加
     let url = `/api/file?path=${encodeURIComponent(path)}`;
     url = appendRootQuery(url, currentReadRoot);
-    if (currentWorktree) {
-      url += `&worktree=${encodeURIComponent(currentWorktree)}`;
-    }
 
     const res = await fetch(url);
 
@@ -1320,7 +1157,7 @@ async function loadFile(path) {
         docEl.innerHTML = '';
         const message = document.createElement('div');
         message.className = 'not-found-message';
-        message.textContent = `このファイルは ${currentWorktree || '選択中の worktree'} には存在しません`;
+        message.textContent = 'このファイルは存在しません';
         docEl.appendChild(message);
         currentDocument = path;
         updateReadHeader(path);
@@ -1356,9 +1193,6 @@ function startPolling() {
     try {
       let url = `/api/file?path=${encodeURIComponent(currentDocument)}`;
       url = appendRootQuery(url, currentReadRoot);
-      if (currentWorktree) {
-        url += `&worktree=${encodeURIComponent(currentWorktree)}`;
-      }
 
       const res = await fetch(url);
 
@@ -2001,10 +1835,6 @@ async function loadDiff(path) {
 function renderDiff(diffData) {
   const leftPanel = document.getElementById('diff-left');
   const rightPanel = document.getElementById('diff-right');
-  const rightHeader = document.getElementById('diff-right-header');
-
-  // ヘッダーを更新
-  rightHeader.textContent = diffData.currentWorktree;
 
   // 左右パネルをクリア
   leftPanel.innerHTML = '';
@@ -2085,7 +1915,6 @@ function clearSelection() {
   document.getElementById('empty-state').classList.remove('hidden');
   document.getElementById('document').classList.add('hidden');
   document.getElementById('diff-view').classList.add('hidden');
-  document.getElementById('worktree-tabs').classList.add('hidden');
   document.getElementById('diff-button-bar').classList.add('hidden');
   updateReadHeader(null);
 }
@@ -2113,12 +1942,6 @@ window.addEventListener('popstate', async (event) => {
   if (state && state.file && isValidPath(state.file)) {
     const nextRoot = isReadableRoot(state.root) ? (state.root || firstReadRootId()) : firstReadRootId();
     currentReadRoot = nextRoot;
-    await loadWorktrees(currentReadRoot);
-
-    // worktreeを先に設定
-    if (state.worktree && worktrees.some(wt => wt.name === state.worktree)) {
-      await selectWorktree(state.worktree, true);
-    }
 
     // ファイルを選択（URL更新はしない）
     const containerId = fileListIdForRoot(currentReadRoot);
