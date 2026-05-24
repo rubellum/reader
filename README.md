@@ -46,7 +46,7 @@ reader -no-open ./repo
 - `-no-open`: 起動時にブラウザを自動で開きません。
 - `-v`: 詳細ログを出します。`-vv` / `-vvv` も指定できます。
 
-`-include` と `-exclude` のどちらも未指定の場合は、`*.md`, `*.txt`, `*.html`, `*.htm` を表示し、`node_modules`, `vendor`, `.git`, `dist`, `build`, `venv` などを除外します。HTML ファイルにはサイドバー上で新しいタブ用の URL リンクが表示されます。
+`-include` と `-exclude` のどちらも未指定の場合は、`*.md`, `*.txt`, `*.html`, `*.htm` を表示し、`node_modules`, `vendor`, `.git`, `dist`, `build`, `venv` などを除外します。HTML ファイルにはサイドバー上で新しいタブ用の URL リンクが表示されます。編集ツリーの HTML リンクもプレビュー用で、サイドバーから直接編集対象として開く操作には使いません。
 
 ## 設定ファイル
 

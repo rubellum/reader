@@ -796,6 +796,24 @@ func TestHandleRaw(t *testing.T) {
 		}
 	})
 
+	t.Run("html preview rejects symlink outside root", func(t *testing.T) {
+		outsideDir := t.TempDir()
+		outsideFile := filepath.Join(outsideDir, "outside.html")
+		if err := os.WriteFile(outsideFile, []byte("<!doctype html><title>outside</title>"), 0o644); err != nil {
+			t.Fatalf("write outside html: %v", err)
+		}
+		linkPath := filepath.Join(root, "outside.html")
+		if err := os.Symlink(outsideFile, linkPath); err != nil {
+			t.Skipf("symlink not available: %v", err)
+		}
+
+		resp := mustGet(t, ts.URL+"/html/read/outside.html")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("missing path returns 400", func(t *testing.T) {
 		resp := mustGet(t, ts.URL+"/api/raw")
 		defer resp.Body.Close()
