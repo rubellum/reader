@@ -770,6 +770,9 @@ func TestHandleRaw(t *testing.T) {
 		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Fatalf("expected nosniff header")
 		}
+		if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+			t.Fatalf("expected no-referrer policy")
+		}
 		csp := resp.Header.Get("Content-Security-Policy")
 		if !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "script-src 'none'") {
 			t.Fatalf("expected sandbox CSP without scripts, got %q", csp)
@@ -831,6 +834,9 @@ func TestHandleRaw(t *testing.T) {
 		}
 		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
 			t.Fatalf("expected nosniff header")
+		}
+		if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+			t.Fatalf("expected no-referrer policy")
 		}
 		csp := resp.Header.Get("Content-Security-Policy")
 		if !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "script-src 'none'") {
