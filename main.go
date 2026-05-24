@@ -317,7 +317,7 @@ func main() {
 	if len(readRoots) > 0 {
 		readRootOptions = make([]server.RootOption, 0, len(readRoots))
 		for _, root := range readRoots {
-			absReadDir, err := validateOptionDir(root.FlagName, root.Path)
+			absReadDir, err := validateOptionDir(root.FlagName, root.Path, false)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
@@ -332,7 +332,7 @@ func main() {
 	// -write の検証と絶対パス化
 	writeRootOptions := make([]server.RootOption, 0, len(writeRoots))
 	for _, root := range writeRoots {
-		absWriteDir, err := validateOptionDir(root.FlagName, root.Path)
+		absWriteDir, err := validateOptionDir(root.FlagName, root.Path, true)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -420,10 +420,18 @@ func openBrowser(url string) {
 	exec.Command("open", url).Start()
 }
 
-func validateOptionDir(flagName, dir string) (string, error) {
+func validateOptionDir(flagName, dir string, createMissing bool) (string, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
-		return "", fmt.Errorf("エラー: %s のディレクトリにアクセスできません: %v", flagName, err)
+		if createMissing && os.IsNotExist(err) {
+			if mkErr := os.MkdirAll(dir, 0o755); mkErr != nil {
+				return "", fmt.Errorf("エラー: %s のディレクトリを作成できません: %v", flagName, mkErr)
+			}
+			info, err = os.Stat(dir)
+		}
+		if err != nil {
+			return "", fmt.Errorf("エラー: %s のディレクトリにアクセスできません: %v", flagName, err)
+		}
 	}
 	if !info.IsDir() {
 		return "", fmt.Errorf("エラー: %s はディレクトリを指定してください: %s", flagName, dir)
