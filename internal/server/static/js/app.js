@@ -96,14 +96,23 @@ function isHTMLFilePath(path) {
   return typeof path === 'string' && /\.html?$/i.test(path);
 }
 
-function rawFileURL(path, rootName, worktreeName, sourceMode = false) {
+function rawFileURL(path, rootName, worktreeName) {
   let url = `/api/raw?path=${encodeURIComponent(path)}`;
   url = appendRootQuery(url, rootName);
   if (worktreeName) {
     url += `&worktree=${encodeURIComponent(worktreeName)}`;
   }
-  if (sourceMode) {
-    url += `${url.includes('?') ? '&' : '?'}source=1`;
+  return url;
+}
+
+function encodePathSegments(path) {
+  return String(path || '').split('/').map(encodeURIComponent).join('/');
+}
+
+function htmlPreviewURL(path, rootName, worktreeName) {
+  let url = `/html/${encodeURIComponent(rootName || firstReadRootId())}/${encodePathSegments(path)}`;
+  if (worktreeName) {
+    url += `?worktree=${encodeURIComponent(worktreeName)}`;
   }
   return url;
 }
@@ -606,7 +615,7 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
     const labelSpan = document.createElement(isHTMLLink ? 'a' : 'span');
     labelSpan.className = 'file-label';
     if (isHTMLLink) {
-      const htmlURL = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree, true);
+      const htmlURL = htmlPreviewURL(file.path, rawLinkRoot, rawLinkWorktree);
       labelSpan.href = htmlURL;
       labelSpan.target = '_blank';
       labelSpan.rel = 'noopener noreferrer';

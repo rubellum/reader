@@ -229,6 +229,7 @@ func (s *Server) setupRoutes() {
 	s.echo.GET("/api/worktrees", s.handleWorktrees)
 	s.echo.GET("/api/diff", s.handleDiff)
 	s.echo.GET("/api/raw", s.handleRaw)
+	s.echo.GET("/html/:root/*", s.handleHTMLPreview)
 
 	// 静的ファイル
 	staticSubFS, _ := fs.Sub(staticFS, "static")
@@ -738,15 +739,58 @@ func (s *Server) handleRaw(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "ディレクトリは配信できません")
 	}
 
-	if c.QueryParam("source") == "1" && isHTMLPath(rawPath) {
-		c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextPlainCharsetUTF8)
-		c.Response().Header().Set("X-Content-Type-Options", "nosniff")
-		return c.File(absFile)
-	}
-
 	// echo の c.File は拡張子から Content-Type を判定するが、
 	// 未知の拡張子のために mime パッケージで保険をかける。
 	if mime.TypeByExtension(filepath.Ext(absFile)) == "" {
+		c.Response().Header().Set(echo.HeaderContentType, "application/octet-stream")
+	}
+	return c.File(absFile)
+}
+
+// handleHTMLPreview は HTML とその相対資産を静的配信する。
+// HTML には sandbox CSP を付与し、script は実行させない。
+func (s *Server) handleHTMLPreview(c echo.Context) error {
+	ctx, err := s.rootByName(c.Param("root"))
+	if err != nil {
+		return err
+	}
+	rawPath := strings.TrimPrefix(c.Param("*"), "/")
+	if rawPath == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "パスが指定されていません")
+	}
+	if err := validateRelativePath(rawPath); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "パスが不正です")
+	}
+
+	baseDir, err := s.resolveWorktreeBaseForCtx(ctx, c.QueryParam("worktree"))
+	if err != nil {
+		return err
+	}
+
+	absBase, _ := filepath.Abs(baseDir)
+	absFile, _ := filepath.Abs(filepath.Join(baseDir, rawPath))
+	rel, relErr := filepath.Rel(absBase, absFile)
+	if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return echo.NewHTTPError(http.StatusForbidden, "アクセスが拒否されました")
+	}
+
+	info, statErr := os.Stat(absFile)
+	if statErr != nil {
+		if os.IsNotExist(statErr) {
+			return echo.NewHTTPError(http.StatusNotFound, "ファイルが見つかりません")
+		}
+		return echo.NewHTTPError(http.StatusInternalServerError, "ファイルの読み込みに失敗しました")
+	}
+	if info.IsDir() {
+		return echo.NewHTTPError(http.StatusBadRequest, "ディレクトリは配信できません")
+	}
+
+	if isHTMLPath(rawPath) {
+		c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+		c.Response().Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+		c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+		c.Response().Header().Set("Referrer-Policy", "no-referrer")
+	} else if mime.TypeByExtension(filepath.Ext(absFile)) == "" {
 		c.Response().Header().Set(echo.HeaderContentType, "application/octet-stream")
 	}
 	return c.File(absFile)
