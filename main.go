@@ -100,6 +100,8 @@ var (
 	defaultIncludes = []string{
 		"*.md",
 		"*.txt",
+		"*.html",
+		"*.htm",
 	}
 	defaultExcludes = []string{
 		"node_modules/*",
@@ -186,7 +188,7 @@ func main() {
 		fmt.Println()
 		fmt.Println("Note:")
 		fmt.Println("  Git リポジトリ必須。git ls-files で管理されたファイルのみ表示します。")
-		fmt.Println("  -include / -exclude のいずれも未指定時はデフォルト (*.md, *.txt と")
+		fmt.Println("  -include / -exclude のいずれも未指定時はデフォルト (*.md, *.txt, *.html, *.htm と")
 		fmt.Println("  node_modules/vendor などの定番除外) が適用されます。")
 	}
 
@@ -404,7 +406,7 @@ func main() {
 		fmt.Printf("書き込みフォルダ%d: %s (%s)\n", i+1, root.BasePath, order)
 	}
 	if useDefaultPatterns {
-		fmt.Println("デフォルトパターン適用中 (include: *.md, *.txt / exclude: node_modules, vendor 等)")
+		fmt.Println("デフォルトパターン適用中 (include: *.md, *.txt, *.html, *.htm / exclude: node_modules, vendor 等)")
 	}
 	fmt.Printf("アーカイブフォルダ: %s\n", *archiveDir)
 	fmt.Println("終了するには Ctrl+C を押してください")

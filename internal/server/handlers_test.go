@@ -728,6 +728,12 @@ func TestHandleRaw(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "doc.md"), []byte("# x"), 0o644); err != nil {
 		t.Fatalf("write md: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "page.html"), []byte("<!doctype html><title>x</title>"), 0o644); err != nil {
+		t.Fatalf("write html: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "style.css"), []byte("body{color:red}"), 0o644); err != nil {
+		t.Fatalf("write css: %v", err)
+	}
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "init")
 
@@ -748,6 +754,93 @@ func TestHandleRaw(t *testing.T) {
 		ct := resp.Header.Get("Content-Type")
 		if !strings.Contains(ct, "image/png") {
 			t.Fatalf("expected image/png Content-Type, got %s", ct)
+		}
+	})
+
+	t.Run("serves html preview with sandbox csp", func(t *testing.T) {
+		resp := mustGet(t, ts.URL+"/html/read/page.html")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "text/html") {
+			t.Fatalf("expected text/html Content-Type, got %s", ct)
+		}
+		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("expected nosniff header")
+		}
+		if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+			t.Fatalf("expected no-referrer policy")
+		}
+		csp := resp.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "script-src 'none'") {
+			t.Fatalf("expected sandbox CSP without scripts, got %q", csp)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "<title>x</title>") {
+			t.Fatalf("expected html body, got %q", string(body))
+		}
+	})
+
+	t.Run("serves html preview relative css", func(t *testing.T) {
+		resp := mustGet(t, ts.URL+"/html/read/style.css")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "text/css") {
+			t.Fatalf("expected text/css Content-Type, got %s", ct)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if string(body) != "body{color:red}" {
+			t.Fatalf("expected css body, got %q", string(body))
+		}
+	})
+
+	t.Run("html preview rejects symlink outside root", func(t *testing.T) {
+		outsideDir := t.TempDir()
+		outsideFile := filepath.Join(outsideDir, "outside.html")
+		if err := os.WriteFile(outsideFile, []byte("<!doctype html><title>outside</title>"), 0o644); err != nil {
+			t.Fatalf("write outside html: %v", err)
+		}
+		linkPath := filepath.Join(root, "outside.html")
+		if err := os.Symlink(outsideFile, linkPath); err != nil {
+			t.Skipf("symlink not available: %v", err)
+		}
+
+		resp := mustGet(t, ts.URL+"/html/read/outside.html")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("expected 403, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("html preview applies csp based on resolved symlink target", func(t *testing.T) {
+		linkPath := filepath.Join(root, "alias.css")
+		if err := os.Symlink("page.html", linkPath); err != nil {
+			t.Skipf("symlink not available: %v", err)
+		}
+
+		resp := mustGet(t, ts.URL+"/html/read/alias.css")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "text/html") {
+			t.Fatalf("expected text/html Content-Type, got %s", ct)
+		}
+		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("expected nosniff header")
+		}
+		if resp.Header.Get("Referrer-Policy") != "no-referrer" {
+			t.Fatalf("expected no-referrer policy")
+		}
+		csp := resp.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "script-src 'none'") {
+			t.Fatalf("expected sandbox CSP without scripts, got %q", csp)
 		}
 	})
 

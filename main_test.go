@@ -9,6 +9,10 @@ import (
 )
 
 func TestDefaultPatternsApplied(t *testing.T) {
+	if !reflect.DeepEqual(defaultIncludes, []string{"*.md", "*.txt", "*.html", "*.htm"}) {
+		t.Fatalf("unexpected default includes: %v", defaultIncludes)
+	}
+
 	// 両方未指定ならデフォルト適用
 	var includes, excludes stringSlice
 	if !(len(includes) == 0 && len(excludes) == 0) {
