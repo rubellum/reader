@@ -2,6 +2,8 @@ package main
 
 import (
 	"net"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -112,6 +114,47 @@ func TestExpandVerbosityArgs(t *testing.T) {
 				t.Fatalf("expandVerbosityArgs(%v) = %v, want %v", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestValidateOptionDirCreatesMissingWriteDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing", "notes")
+
+	got, err := validateOptionDir("-write", dir, true)
+	if err != nil {
+		t.Fatalf("validateOptionDir returned error: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("expected %s, got %s", dir, got)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("expected directory to be created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected created path to be a directory")
+	}
+}
+
+func TestValidateOptionDirReadDirStillRequiresExistingDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+
+	if _, err := validateOptionDir("-read", dir, false); err == nil {
+		t.Fatalf("expected missing read directory to fail")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("expected read directory not to be created, got err=%v", err)
+	}
+}
+
+func TestValidateOptionDirRejectsFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "notes")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	if _, err := validateOptionDir("-write", file, true); err == nil {
+		t.Fatalf("expected file path to be rejected")
 	}
 }
 
