@@ -728,6 +728,9 @@ func TestHandleRaw(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "doc.md"), []byte("# x"), 0o644); err != nil {
 		t.Fatalf("write md: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(root, "page.html"), []byte("<!doctype html><title>x</title>"), 0o644); err != nil {
+		t.Fatalf("write html: %v", err)
+	}
 	runGit(t, root, "add", ".")
 	runGit(t, root, "commit", "-m", "init")
 
@@ -748,6 +751,25 @@ func TestHandleRaw(t *testing.T) {
 		ct := resp.Header.Get("Content-Type")
 		if !strings.Contains(ct, "image/png") {
 			t.Fatalf("expected image/png Content-Type, got %s", ct)
+		}
+	})
+
+	t.Run("serves html source as plain text when requested", func(t *testing.T) {
+		resp := mustGet(t, ts.URL+"/api/raw?path=page.html&source=1")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "text/plain") {
+			t.Fatalf("expected text/plain Content-Type, got %s", ct)
+		}
+		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("expected nosniff header")
+		}
+		body, _ := io.ReadAll(resp.Body)
+		if !strings.Contains(string(body), "<title>x</title>") {
+			t.Fatalf("expected html source body, got %q", string(body))
 		}
 	})
 

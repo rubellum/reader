@@ -9,6 +9,10 @@ import (
 )
 
 func TestDefaultPatternsApplied(t *testing.T) {
+	if !reflect.DeepEqual(defaultIncludes, []string{"*.md", "*.txt", "*.html", "*.htm"}) {
+		t.Fatalf("unexpected default includes: %v", defaultIncludes)
+	}
+
 	// 両方未指定ならデフォルト適用
 	var includes, excludes stringSlice
 	if !(len(includes) == 0 && len(excludes) == 0) {
@@ -180,4 +184,46 @@ func TestListenWithFallback_FallbackListenerIsUsable(t *testing.T) {
 		t.Fatalf("failed to connect to fallback listener: %v", err)
 	}
 	conn.Close()
+}
+
+func TestValidateOptionDirCreatesMissingWriteDir(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "missing", "notes")
+
+	got, err := validateOptionDir("-write", dir, true)
+	if err != nil {
+		t.Fatalf("validateOptionDir: %v", err)
+	}
+	if got != dir {
+		t.Fatalf("path = %q, want %q", got, dir)
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat created dir: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatalf("expected created path to be directory")
+	}
+}
+
+func TestValidateOptionDirReadDirStillRequiresExistingDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "missing")
+
+	if _, err := validateOptionDir("-read", dir, false); err == nil {
+		t.Fatalf("expected missing read dir to fail")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatalf("read dir should not be created")
+	}
+}
+
+func TestValidateOptionDirRejectsFile(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "notes")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	if _, err := validateOptionDir("-write", file, true); err == nil {
+		t.Fatalf("expected file path to fail")
+	}
 }

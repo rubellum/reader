@@ -46,7 +46,7 @@ reader -no-open ./repo
 - `-no-open`: 起動時にブラウザを自動で開きません。
 - `-v`: 詳細ログを出します。`-vv` / `-vvv` も指定できます。
 
-`-include` と `-exclude` のどちらも未指定の場合は、`*.md` と `*.txt` のみを表示し、`node_modules`, `vendor`, `.git`, `dist`, `build`, `venv` などを除外します。
+`-include` と `-exclude` のどちらも未指定の場合は、`*.md`, `*.txt`, `*.html`, `*.htm` を表示し、`node_modules`, `vendor`, `.git`, `dist`, `build`, `venv` などを除外します。HTML ファイルにはサイドバー上で新しいタブ用の URL リンクが表示されます。
 
 ## 設定ファイル
 
@@ -56,7 +56,7 @@ CLI 未指定の値は JSON 設定ファイルから読み込めます。CLI で
 {
   "host": "127.0.0.1",
   "port": 3333,
-  "include": ["*.md", "*.txt"],
+  "include": ["*.md", "*.txt", "*.html", "*.htm"],
   "exclude": ["draft/*"],
   "read": "/path/to/reference",
   "read-r": "/path/to/archive",

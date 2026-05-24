@@ -738,12 +738,23 @@ func (s *Server) handleRaw(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "ディレクトリは配信できません")
 	}
 
+	if c.QueryParam("source") == "1" && isHTMLPath(rawPath) {
+		c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextPlainCharsetUTF8)
+		c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+		return c.File(absFile)
+	}
+
 	// echo の c.File は拡張子から Content-Type を判定するが、
 	// 未知の拡張子のために mime パッケージで保険をかける。
 	if mime.TypeByExtension(filepath.Ext(absFile)) == "" {
 		c.Response().Header().Set(echo.HeaderContentType, "application/octet-stream")
 	}
 	return c.File(absFile)
+}
+
+func isHTMLPath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return ext == ".html" || ext == ".htm"
 }
 
 // resolveWorktreeBaseForCtx は指定 rootCtx で worktree 名から実ベースディレクトリを返す。

@@ -54,6 +54,7 @@ printf '<!doctype html><title>page</title>\n' > "${read_b}/page.html"
 printf '# alpha write A\n' > "${write_a}/alpha.md"
 printf '# zeta write A\n' > "${write_a}/zeta.md"
 printf '# beta write B\n' > "${write_b}/beta.md"
+printf '<!doctype html><title>write page</title>\n' > "${write_b}/page.html"
 
 (
 	cd "${ROOT_DIR}"
@@ -121,11 +122,41 @@ initial_json="$(
 		firstReadFiles: Array.from(document.querySelectorAll('#read-root-file-list-read .file-item .file-name')).map(e => e.textContent.trim()),
 		secondReadFiles: Array.from(document.querySelectorAll('#read-root-file-list-read-2 .file-item .file-name')).map(e => e.textContent.trim()),
 		secondReadHtmlLink: (() => {
-			const el = document.querySelector('#read-root-file-list-read-2 a.file-item[data-path=\"page.html\"]');
-			return el && { href: el.getAttribute('href'), target: el.getAttribute('target'), rel: el.getAttribute('rel') };
+			const icon = document.querySelector('#read-root-file-list-read-2 .file-item[data-path=\"page.html\"] .html-url-link');
+			const link = icon?.closest('.file-label');
+			return icon && link && {
+				href: link.getAttribute('href'),
+				target: link.getAttribute('target'),
+				rel: link.getAttribute('rel'),
+				inlineWithName: icon.parentElement?.classList.contains('file-label') && icon.previousElementSibling?.classList.contains('file-name'),
+				labelTag: link.tagName
+			};
+		})(),
+		secondReadHtmlClickOpen: (() => {
+			const link = document.querySelector('#read-root-file-list-read-2 .file-item[data-path=\"page.html\"] .file-label');
+			const originalOpen = window.open;
+			let opened = null;
+			window.open = (url, target, features) => {
+				opened = { url, target, features };
+				return {};
+			};
+			link?.click();
+			window.open = originalOpen;
+			return opened;
 		})(),
 		firstWriteFiles: Array.from(document.querySelectorAll('#write-root-file-list-write .file-item .file-name')).map(e => e.textContent.trim()),
 		secondWriteFiles: Array.from(document.querySelectorAll('#write-root-file-list-write-2 .file-item .file-name')).map(e => e.textContent.trim()),
+		secondWriteHtmlLink: (() => {
+			const icon = document.querySelector('#write-root-file-list-write-2 .file-item[data-path=\"page.html\"] .html-url-link');
+			const link = icon?.closest('.file-label');
+			return icon && link && {
+				href: link.getAttribute('href'),
+				target: link.getAttribute('target'),
+				rel: link.getAttribute('rel'),
+				inlineWithName: icon.parentElement?.classList.contains('file-label') && icon.previousElementSibling?.classList.contains('file-name'),
+				labelTag: link.tagName
+			};
+		})(),
 		firstReadDirLabels: Array.from(document.querySelectorAll('#read-root-file-list-read .dir-label')).map(e => e.textContent.trim()),
 		secondReadDirLabels: Array.from(document.querySelectorAll('#read-root-file-list-read-2 .dir-label')).map(e => e.textContent.trim()),
 		firstWriteDirLabels: Array.from(document.querySelectorAll('#write-root-file-list-write .dir-label')).map(e => e.textContent.trim()),
@@ -151,11 +182,20 @@ assert(eq(r.readRoots, ["read-a", "read-b"]), "read accordions should follow com
 assert(eq(r.writeRoots, ["write-a", "write-b"]), "write accordions should follow command order");
 assert(eq(r.firstReadFiles, ["zeta.md", "alpha.md", "zeta.md", "alpha.md"]), "read-r tree should be descending");
 assert(eq(r.secondReadFiles, ["beta.md", "page.html"]), "second read tree should render");
-assert(r.secondReadHtmlLink && r.secondReadHtmlLink.href === "/api/raw?path=page.html&root=read-2", "html files in read sidebar should link to raw file");
+assert(r.secondReadHtmlLink && r.secondReadHtmlLink.href === "/api/raw?path=page.html&root=read-2&source=1", "html files in read sidebar should link to raw file source");
 assert(r.secondReadHtmlLink.target === "_blank", "html sidebar links should open in a new tab");
 assert(r.secondReadHtmlLink.rel === "noopener noreferrer", "html sidebar links should protect the opener");
+assert(r.secondReadHtmlLink.inlineWithName, "html sidebar link should be immediately after the file name");
+assert(r.secondReadHtmlLink.labelTag === "A", "html file label should be a native link");
+assert(r.secondReadHtmlClickOpen && r.secondReadHtmlClickOpen.url === "/api/raw?path=page.html&root=read-2&source=1", "clicking html file label should request the raw HTML source URL");
+assert(r.secondReadHtmlClickOpen.target === "_blank", "clicking html file label should request a new tab");
 assert(eq(r.firstWriteFiles, ["zeta.md", "alpha.md"]), "write-r tree should be descending");
-assert(eq(r.secondWriteFiles, ["beta.md"]), "second write tree should render");
+assert(eq(r.secondWriteFiles, ["beta.md", "page.html"]), "second write tree should render");
+assert(r.secondWriteHtmlLink && r.secondWriteHtmlLink.href === "/api/raw?path=page.html&root=write-2&source=1", "html files in write sidebar should link to raw file source");
+assert(r.secondWriteHtmlLink.target === "_blank", "write html sidebar links should open in a new tab");
+assert(r.secondWriteHtmlLink.rel === "noopener noreferrer", "write html sidebar links should protect the opener");
+assert(r.secondWriteHtmlLink.inlineWithName, "write html sidebar link should be immediately after the file name");
+assert(r.secondWriteHtmlLink.labelTag === "A", "write html file label should be a native link");
 assert(eq(r.firstReadDirLabels, ["▶docs/"]), "read root name should not be duplicated inside first read accordion");
 assert(eq(r.secondReadDirLabels, []), "root-only read files should not render duplicate read root directory");
 assert(eq(r.firstWriteDirLabels, []), "root-only write files should not render duplicate write root directory");

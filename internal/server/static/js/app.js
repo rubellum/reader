@@ -96,13 +96,28 @@ function isHTMLFilePath(path) {
   return typeof path === 'string' && /\.html?$/i.test(path);
 }
 
-function rawFileURL(path, rootName, worktreeName) {
+function rawFileURL(path, rootName, worktreeName, sourceMode = false) {
   let url = `/api/raw?path=${encodeURIComponent(path)}`;
   url = appendRootQuery(url, rootName);
   if (worktreeName) {
     url += `&worktree=${encodeURIComponent(worktreeName)}`;
   }
+  if (sourceMode) {
+    url += `${url.includes('?') ? '&' : '?'}source=1`;
+  }
   return url;
+}
+
+function openHTMLFileURL(url) {
+  const opened = window.open(url, '_blank');
+  if (opened) {
+    opened.opener = null;
+    if (typeof opened.focus === 'function') {
+      opened.focus();
+    }
+  } else {
+    window.location.href = url;
+  }
 }
 
 // パスの簡易バリデーション（多層防御）
@@ -566,15 +581,15 @@ function flattenTree(item) {
 }
 
 function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
-  const htmlFilesOpenInNewTab = !!opts.htmlFilesOpenInNewTab;
+  const showHTMLURLLinks = !!opts.showHTMLURLLinks;
   const rawLinkRoot = opts.rawLinkRoot || currentReadRoot;
   const rawLinkWorktree = opts.rawLinkWorktree || null;
   const isUnread = opts.isUnread || (() => false);
   const onArchiveFile = opts.onArchiveFile || null;
 
   files.forEach(file => {
-    const isHTMLLink = htmlFilesOpenInNewTab && isHTMLFilePath(file.path);
-    const fileItem = document.createElement(isHTMLLink ? 'a' : 'div');
+    const isHTMLLink = showHTMLURLLinks && isHTMLFilePath(file.path);
+    const fileItem = document.createElement('div');
     fileItem.className = 'file-item';
     fileItem.dataset.path = file.path;
     const unread = !!isUnread(file.path);
@@ -588,10 +603,20 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
     unreadDot.setAttribute('aria-hidden', 'true');
     fileItem.appendChild(unreadDot);
 
+    const labelSpan = document.createElement(isHTMLLink ? 'a' : 'span');
+    labelSpan.className = 'file-label';
     if (isHTMLLink) {
-      fileItem.href = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree);
-      fileItem.target = '_blank';
-      fileItem.rel = 'noopener noreferrer';
+      const htmlURL = rawFileURL(file.path, rawLinkRoot, rawLinkWorktree, true);
+      labelSpan.href = htmlURL;
+      labelSpan.target = '_blank';
+      labelSpan.rel = 'noopener noreferrer';
+      labelSpan.title = 'HTMLを新しいタブで開く';
+      labelSpan.setAttribute('aria-label', `${file.name} のURLを新しいタブで開く`);
+      labelSpan.addEventListener('click', (e) => {
+        if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        e.preventDefault();
+        openHTMLFileURL(htmlURL);
+      });
     }
 
     const nameSpan = document.createElement('span');
@@ -601,7 +626,17 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
     } else {
       nameSpan.textContent = file.name;
     }
-    fileItem.appendChild(nameSpan);
+    labelSpan.appendChild(nameSpan);
+
+    if (isHTMLLink) {
+      const htmlURLLink = document.createElement('span');
+      htmlURLLink.className = 'html-url-link';
+      htmlURLLink.title = 'HTMLを新しいタブで開く';
+      htmlURLLink.setAttribute('aria-hidden', 'true');
+      htmlURLLink.innerHTML = HTML_URL_LINK_ICON_HTML;
+      labelSpan.appendChild(htmlURLLink);
+    }
+    fileItem.appendChild(labelSpan);
 
     if (onArchiveFile) {
       const archiveBtn = document.createElement('button');
@@ -634,6 +669,7 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
   });
 }
 
+const HTML_URL_LINK_ICON_HTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><path d="M15 3h6v6"></path><path d="M10 14L21 3"></path></svg>';
 const ARCHIVE_ICON_HTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8"></path><path d="M10 12h4"></path><path d="M2 3h20v5H2z"></path></svg>';
 
 function resetArchiveButton(button, fileName) {
@@ -672,7 +708,7 @@ function renderFileList(data, container, opts = {}) {
   const isUnread = opts.isUnread || (() => false);
   const unreadOnly = !!opts.unreadOnly;
   const appendFileOptions = {
-    htmlFilesOpenInNewTab: !!opts.htmlFilesOpenInNewTab,
+    showHTMLURLLinks: !!opts.showHTMLURLLinks,
     rawLinkRoot: opts.rawLinkRoot || currentReadRoot,
     rawLinkWorktree: opts.rawLinkWorktree || null,
     isUnread,
@@ -1178,7 +1214,7 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     sortDesc: root.sortDesc,
     isUnread: path => isPathUnread(scope, path),
     unreadOnly: unreadFilterMode === 'unread',
-    htmlFilesOpenInNewTab: true,
+    showHTMLURLLinks: true,
     rawLinkRoot: root.id,
     onArchiveFile: path => archiveFile(path, root.id),
   });
@@ -1213,6 +1249,8 @@ function renderWriteTree(rootId = firstWriteRootId(), parentContainer = null) {
     enableDirFilterLinks: false,
     onCollapsedChange: () => updateToggleAllWriteButton(root.id),
     sortDesc: root.sortDesc,
+    showHTMLURLLinks: true,
+    rawLinkRoot: root.id,
     onArchiveFile: path => archiveFile(path, root.id),
   });
   if (currentEditRoot === root.id && currentEditFile) restoreSelectionInElement(body, currentEditFile);
