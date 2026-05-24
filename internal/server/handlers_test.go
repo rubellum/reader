@@ -814,6 +814,30 @@ func TestHandleRaw(t *testing.T) {
 		}
 	})
 
+	t.Run("html preview applies csp based on resolved symlink target", func(t *testing.T) {
+		linkPath := filepath.Join(root, "alias.css")
+		if err := os.Symlink("page.html", linkPath); err != nil {
+			t.Skipf("symlink not available: %v", err)
+		}
+
+		resp := mustGet(t, ts.URL+"/html/read/alias.css")
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+		ct := resp.Header.Get("Content-Type")
+		if !strings.Contains(ct, "text/html") {
+			t.Fatalf("expected text/html Content-Type, got %s", ct)
+		}
+		if resp.Header.Get("X-Content-Type-Options") != "nosniff" {
+			t.Fatalf("expected nosniff header")
+		}
+		csp := resp.Header.Get("Content-Security-Policy")
+		if !strings.Contains(csp, "sandbox") || !strings.Contains(csp, "script-src 'none'") {
+			t.Fatalf("expected sandbox CSP without scripts, got %q", csp)
+		}
+	})
+
 	t.Run("missing path returns 400", func(t *testing.T) {
 		resp := mustGet(t, ts.URL+"/api/raw")
 		defer resp.Body.Close()

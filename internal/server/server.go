@@ -795,7 +795,7 @@ func (s *Server) handleHTMLPreview(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusForbidden, "アクセスが拒否されました")
 	}
 
-	if isHTMLPath(rawPath) {
+	if isHTMLPath(resolvedFile) {
 		c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
 		c.Response().Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 		c.Response().Header().Set("X-Content-Type-Options", "nosniff")
