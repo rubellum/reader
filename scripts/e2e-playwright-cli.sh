@@ -297,4 +297,44 @@ assert(r.editValue === "# beta write B", "edit pane should load second write roo
 assert(JSON.stringify(r.selectedPaths) === JSON.stringify(["beta.md"]), "second write root row should be selected");
 '
 
+playwright-cli -s="${SESSION}" resize 390 844 >/dev/null
+playwright-cli -s="${SESSION}" goto "${url}?editFile=beta.md&editRoot=write-2" >/dev/null
+
+mobile_edit_url_json=""
+for _ in $(seq 1 100); do
+	mobile_edit_url_json="$(
+		playwright-cli -s="${SESSION}" --raw eval "JSON.stringify({
+			url: location.search,
+			sidebarCollapsed: document.querySelector('#sidebar').classList.contains('collapsed'),
+			mobileShowWrite: document.querySelector('.content-wrapper').classList.contains('mobile-show-write'),
+			readDisplay: getComputedStyle(document.querySelector('#pane-read')).display,
+			writeDisplay: getComputedStyle(document.querySelector('#pane-write')).display,
+			editHeader: document.querySelector('#edit-filename').textContent.trim(),
+			editValue: document.querySelector('#edit-textarea').value.trim(),
+			selectedPaths: Array.from(document.querySelectorAll('#write-root-file-list-write-2 .file-item.selected')).map(e => e.dataset.path)
+		})"
+	)"
+	if RESULT="${mobile_edit_url_json}" node -e '
+let r = JSON.parse(process.env.RESULT);
+if (typeof r === "string") r = JSON.parse(r);
+process.exit(r.editHeader === "write-b/beta.md" ? 0 : 1);
+' >/dev/null 2>&1; then
+		break
+	fi
+	sleep 0.1
+done
+
+RESULT="${mobile_edit_url_json}" node -e '
+let r = JSON.parse(process.env.RESULT);
+if (typeof r === "string") r = JSON.parse(r);
+function assert(ok, msg) { if (!ok) throw new Error(msg + "\n" + JSON.stringify(r, null, 2)); }
+assert(r.url.includes("editFile=beta.md") && r.url.includes("editRoot=write-2"), "mobile edit URL should preserve write root");
+assert(r.sidebarCollapsed, "mobile edit URL should open directly to detail view");
+assert(r.mobileShowWrite, "mobile edit URL should show the write pane");
+assert(r.readDisplay === "none" && r.writeDisplay === "flex", "mobile edit URL should hide read pane and show write pane");
+assert(r.editHeader === "write-b/beta.md", "mobile edit URL should show selected write root");
+assert(r.editValue === "# beta write B", "mobile edit URL should load second write root content");
+assert(JSON.stringify(r.selectedPaths) === JSON.stringify(["beta.md"]), "mobile edit URL should select second write root row");
+'
+
 echo "playwright-cli e2e passed"

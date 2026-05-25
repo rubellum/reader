@@ -1221,9 +1221,65 @@ body.resizing-pane {
     display: none !important;
   }
 
-  /* スマホ時のサイドバーは画面いっぱいに重ねず、開いている時だけ画面の一部を占める。
-   * 既存のサイドバー幅は保持しつつ、最大幅を画面幅に抑える */
+  /* スマホ時はサイドバーのファイル一覧を主表示にし、選択後は詳細ペインだけを表示する */
+  .main {
+    width: 100%;
+  }
+
   .sidebar {
-    max-width: 80vw;
+    width: 100% !important;
+    max-width: none;
+    border-right: none;
+  }
+
+  .sidebar-resizer {
+    display: none;
+  }
+
+  .content-area {
+    min-width: 100%;
+  }
+
+  .sidebar-open-btn {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    padding: 5px 10px;
+    font-size: 12px;
+    line-height: 1.2;
+    background-color: #ffffff;
+    border-color: #d1d5db;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  }
+
+  .sidebar-open-btn::after {
+    content: "一覧";
+    margin-left: 4px;
+  }
+
+  .pane-header {
+    padding-left: 72px;
+  }
+
+  .content {
+    padding: 24px 16px;
+  }
+
+  .edit-textarea {
+    padding: 24px 16px;
+  }
+
+  .diff-container {
+    flex-direction: column;
+  }
+
+  .diff-panel {
+    min-height: 0;
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .diff-panel:last-child {
+    border-bottom: none;
   }
 }

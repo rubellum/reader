@@ -247,6 +247,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (params.file && isValidPath(params.file)) {
     await selectFileByPath(params.file);
   }
+  syncMobileInitialView();
 
   // 編集ファイルの自動選択（writeEnabled 時のみ）
   if (writeEnabled && params.editFile && isValidPath(params.editFile)) {
@@ -254,6 +255,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentEditRoot = params.editRoot;
     }
     await selectEditFileByPath(params.editFile);
+    syncMobileInitialView();
   }
 
   // ポーリング開始
@@ -477,6 +479,34 @@ function setMobilePane(pane) {
   document.querySelectorAll('.mobile-pane-tab').forEach(t => {
     t.classList.toggle('active', t.dataset.pane === pane);
   });
+}
+
+function isMobileLayout() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function setSidebarCollapsed(collapsed, { persist = true } = {}) {
+  const sidebar = document.getElementById('sidebar');
+  const openBtn = document.getElementById('sidebar-open-btn');
+  if (!sidebar || !openBtn) return;
+
+  sidebar.classList.toggle('collapsed', collapsed);
+  openBtn.classList.toggle('hidden', !collapsed);
+
+  if (!persist) return;
+  if (collapsed) lsSet(SIDEBAR_COLLAPSED_KEY, '1');
+  else lsRemove(SIDEBAR_COLLAPSED_KEY);
+}
+
+function showMobileDetailView() {
+  if (!isMobileLayout()) return;
+  setSidebarCollapsed(true, { persist: false });
+}
+
+function syncMobileInitialView() {
+  if (!isMobileLayout()) return;
+  setMobilePane(currentEditFile ? 'write' : 'read');
+  setSidebarCollapsed(!!(currentDocument || currentEditFile), { persist: false });
 }
 
 function restorePaneCollapseState() {
@@ -1424,6 +1454,7 @@ async function selectFile(path, rowElement, skipURLUpdate = false, rootName = fi
     updateURL(path);
     // ユーザー操作起点ならスマホ表示で閲覧ペインに切替
     setMobilePane('read');
+    showMobileDetailView();
   }
 
   await loadDiff(path);
@@ -1763,10 +1794,7 @@ function restoreSidebarPersistedState() {
   }
 
   if (lsGet(SIDEBAR_COLLAPSED_KEY) === '1') {
-    const sidebar = document.getElementById('sidebar');
-    const openBtn = document.getElementById('sidebar-open-btn');
-    if (sidebar) sidebar.classList.add('collapsed');
-    if (openBtn) openBtn.classList.remove('hidden');
+    setSidebarCollapsed(true, { persist: false });
   }
 
   setSidebarSectionHidden('read', lsGet(READ_SECTION_HIDDEN_KEY) === '1');
@@ -2012,15 +2040,10 @@ function initSidebarSectionResizer() {
 // サイドバーの開閉
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  const openBtn = document.getElementById('sidebar-open-btn');
-  const collapsed = sidebar.classList.toggle('collapsed');
-  if (collapsed) {
-    openBtn.classList.remove('hidden');
-    lsSet(SIDEBAR_COLLAPSED_KEY, '1');
-  } else {
-    openBtn.classList.add('hidden');
-    lsRemove(SIDEBAR_COLLAPSED_KEY);
-  }
+  if (!sidebar) return;
+  setSidebarCollapsed(!sidebar.classList.contains('collapsed'), {
+    persist: !isMobileLayout(),
+  });
 }
 
 // ===== 編集ペイン =====
@@ -2091,6 +2114,7 @@ async function selectEditFile(path, rowElement, skipURLUpdate = false, rootId = 
     updateEditURL(path);
     // ユーザー操作起点ならスマホ表示で編集ペインに切替
     setMobilePane('write');
+    showMobileDetailView();
   }
 }
 
@@ -2415,6 +2439,7 @@ window.addEventListener('popstate', async (event) => {
     // パラメータがない場合は選択解除
     clearSelection();
   }
+  syncMobileInitialView();
 
   // 編集ファイルの復元（writeEnabled 時のみ、状態が変わった場合のみ反映）
   if (writeEnabled) {
@@ -2427,5 +2452,6 @@ window.addEventListener('popstate', async (event) => {
         await selectEditFile(editPath, editItem, true, currentEditRoot);
       }
     }
+    syncMobileInitialView();
   }
 });
