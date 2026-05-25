@@ -207,6 +207,54 @@ assert(r.readSectionCount === 1, "readings should be one section");
 assert(r.writeSectionCount === 1, "writings should be one section");
 '
 
+playwright-cli -s="${SESSION}" --raw eval "(() => {
+	const state = JSON.parse(localStorage.getItem('reader.readState.v1') || '{\"schema\":1,\"scopes\":{}}');
+	state.schema = 1;
+	state.scopes = state.scopes || {};
+	state.scopes['read-2'] = { baselineVersionMs: 0, files: {} };
+	localStorage.setItem('reader.readState.v1', JSON.stringify(state));
+	location.reload();
+})()" >/dev/null
+
+wait_for_ui_ready
+
+html_read_json="$(
+	playwright-cli -s="${SESSION}" --raw eval "JSON.stringify((() => {
+		const rowSelector = '#read-root-file-list-read-2 .file-item[data-path=\"page.html\"]';
+		const link = document.querySelector(rowSelector + ' .file-label');
+		const countText = () => document.querySelector('#unread-total-count')?.textContent.trim();
+		const rowUnread = () => document.querySelector(rowSelector)?.classList.contains('unread');
+		const before = { pageUnread: rowUnread(), unreadTotal: countText() };
+		const originalOpen = window.open;
+		let opened = null;
+		window.open = (url, target, features) => {
+			opened = { url, target, features };
+			return {};
+		};
+		link?.click();
+		window.open = originalOpen;
+		const state = JSON.parse(localStorage.getItem('reader.readState.v1') || '{}');
+		return {
+			before,
+			after: { pageUnread: rowUnread(), unreadTotal: countText() },
+			opened,
+			readEntry: state.scopes?.['read-2']?.files?.['page.html'] || null
+		};
+	})())"
+)"
+
+RESULT="${html_read_json}" node -e '
+let r = JSON.parse(process.env.RESULT);
+if (typeof r === "string") r = JSON.parse(r);
+function assert(ok, msg) { if (!ok) throw new Error(msg + "\n" + JSON.stringify(r, null, 2)); }
+assert(r.before.pageUnread === true, "html file should be unread before opening");
+assert(r.before.unreadTotal === "2", "second read root should start with two unread files");
+assert(r.opened && r.opened.url === "/html/read-2/page.html", "clicking unread html file should still open preview URL");
+assert(r.after.pageUnread === false, "html file should become read after opening");
+assert(r.after.unreadTotal === "1", "unread total should decrement after opening html");
+assert(r.readEntry && Number(r.readEntry.version?.modifiedAtMs) > 0, "html read state should store file version");
+'
+
 playwright-cli -s="${SESSION}" click "#toggle-all-read-btn" >/dev/null
 playwright-cli -s="${SESSION}" click "#toggle-all-write-btn" >/dev/null
 

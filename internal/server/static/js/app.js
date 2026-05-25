@@ -625,6 +625,7 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
   const rawLinkWorktree = opts.rawLinkWorktree || null;
   const isUnread = opts.isUnread || (() => false);
   const onArchiveFile = opts.onArchiveFile || null;
+  const onOpenHTMLFile = opts.onOpenHTMLFile || null;
 
   files.forEach(file => {
     const isHTMLLink = showHTMLURLLinks && isHTMLFilePath(file.path);
@@ -651,10 +652,17 @@ function appendFileItems(container, files, keyword, onSelectFile, opts = {}) {
       labelSpan.rel = 'noopener noreferrer';
       labelSpan.title = 'HTMLを新しいタブで開く';
       labelSpan.setAttribute('aria-label', `${file.name} のURLを新しいタブで開く`);
+      const markHTMLFileOpened = () => {
+        if (onOpenHTMLFile) onOpenHTMLFile(file.path);
+      };
       labelSpan.addEventListener('click', (e) => {
+        markHTMLFileOpened();
         if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
         e.preventDefault();
         openHTMLFileURL(htmlURL);
+      });
+      labelSpan.addEventListener('auxclick', (e) => {
+        if (e.button === 1) markHTMLFileOpened();
       });
     }
 
@@ -752,6 +760,7 @@ function renderFileList(data, container, opts = {}) {
     rawLinkWorktree: opts.rawLinkWorktree || null,
     isUnread,
     onArchiveFile: opts.onArchiveFile || null,
+    onOpenHTMLFile: opts.onOpenHTMLFile || null,
   };
 
   container.innerHTML = '';
@@ -1255,6 +1264,7 @@ function renderReadTree(rootId = firstReadRootId(), parentContainer = null) {
     unreadOnly: unreadFilterMode === 'unread',
     showHTMLURLLinks: true,
     rawLinkRoot: root.id,
+    onOpenHTMLFile: path => markRead(root.id, path),
     onArchiveFile: path => archiveFile(path, root.id),
   });
   if (currentReadRoot === root.id && currentDocument) restoreSelectionInElement(body, currentDocument);
