@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -77,10 +76,6 @@ func (s *Server) handlePullRequests(c echo.Context) error {
 
 func (s *Server) cachedPullRequests(ctx context.Context, now time.Time) pullRequestResponse {
 	cache := s.prCache
-	if cache == nil {
-		cache = newPullRequestCache()
-		s.prCache = cache
-	}
 
 	cache.mu.Lock()
 	for {
@@ -305,16 +300,50 @@ func pullRequestStateHash(pr ghPullRequest, reason, status string) int64 {
 }
 
 func hasFailingStatusCheck(raw json.RawMessage) bool {
-	if len(raw) == 0 || bytes.Equal(raw, []byte("null")) {
+	if len(raw) == 0 || string(raw) == "null" {
 		return false
 	}
-	upper := strings.ToUpper(string(raw))
-	for _, status := range []string{"FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED"} {
-		if strings.Contains(upper, status) {
-			return true
+
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return false
+	}
+	return hasFailingStatusValue(value)
+}
+
+func hasFailingStatusValue(value any) bool {
+	switch v := value.(type) {
+	case []any:
+		for _, item := range v {
+			if hasFailingStatusValue(item) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, item := range v {
+			switch strings.ToLower(key) {
+			case "state", "conclusion":
+				status, ok := item.(string)
+				if ok && isFailingStatus(status) {
+					return true
+				}
+			default:
+				if hasFailingStatusValue(item) {
+					return true
+				}
+			}
 		}
 	}
 	return false
+}
+
+func isFailingStatus(status string) bool {
+	switch strings.ToUpper(status) {
+	case "FAILURE", "ERROR", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE":
+		return true
+	default:
+		return false
+	}
 }
 
 func parsePRUpdatedAt(raw string) (string, int64) {

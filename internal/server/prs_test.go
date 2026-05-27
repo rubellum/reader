@@ -129,6 +129,43 @@ func TestClassifyPullRequest(t *testing.T) {
 	}
 }
 
+func TestHasFailingStatusCheck(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  json.RawMessage
+		want bool
+	}{
+		{
+			name: "state failure",
+			raw:  json.RawMessage(`{"state":"FAILURE"}`),
+			want: true,
+		},
+		{
+			name: "nested action required conclusion",
+			raw:  json.RawMessage(`{"nodes":[{"conclusion":"ACTION_REQUIRED"}]}`),
+			want: true,
+		},
+		{
+			name: "failure text in name is ignored",
+			raw:  json.RawMessage(`{"checkRuns":[{"name":"failure docs","conclusion":"SUCCESS"}]}`),
+			want: false,
+		},
+		{
+			name: "malformed json is ignored",
+			raw:  json.RawMessage(`{"state":`),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := hasFailingStatusCheck(tt.raw); got != tt.want {
+				t.Fatalf("hasFailingStatusCheck() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPullRequestVersionSizeIncludesActionableState(t *testing.T) {
 	base := ghPullRequest{
 		Number:            1,
