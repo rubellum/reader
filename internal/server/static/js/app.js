@@ -2209,6 +2209,8 @@ async function saveCurrentEdit({ silent = false } = {}) {
 
 async function runAnnotationProofread() {
   if (!currentEditFile) return;
+  const targetRoot = currentEditRoot;
+  const targetPath = currentEditFile;
   const proofreadBtn = document.getElementById('edit-proofread-btn');
   const originalText = proofreadBtn ? proofreadBtn.textContent : '';
   if (proofreadBtn) {
@@ -2221,8 +2223,8 @@ async function runAnnotationProofread() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        root: currentEditRoot,
-        path: currentEditFile,
+        root: targetRoot,
+        path: targetPath,
         instruction: 'アノテーションに従って本文を添削してください',
         mode: 'annotation-proofread',
       }),
@@ -2231,11 +2233,12 @@ async function runAnnotationProofread() {
     if (!res.ok) {
       throw new Error(payload.message || `status ${res.status}`);
     }
-    const path = currentEditFile;
-    await loadEditFile(path);
-    await loadWriteTree(currentEditRoot);
-    if (currentDocument === path) {
-      await loadFile(path);
+    await loadWriteTree(targetRoot);
+    if (currentEditRoot === targetRoot && currentEditFile === targetPath && !editDirty) {
+      await loadEditFile(targetPath);
+    }
+    if (currentDocument === targetPath) {
+      await loadFile(targetPath);
     }
     showEditStatus(payload.status === 'failed' ? '添削が失敗しました' : '添削が完了しました', payload.status === 'failed');
   } catch (e) {

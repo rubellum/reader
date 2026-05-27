@@ -163,6 +163,10 @@ func NewWithOptions(opts Options) *Server {
 	}
 	if len(s.readRoots) > 0 {
 		s.codingAgentService = codingagent.NewService(s.readRoots[0].ctx.gitRoot, opts.CodingAgentRunner)
+		s.codingAgentService.AllowedRoots = map[string]string{}
+		for _, wr := range s.writeRoots {
+			s.codingAgentService.SetAllowedRoot(wr.id, wr.ctx.basePath)
+		}
 	}
 
 	s.setupRoutes()

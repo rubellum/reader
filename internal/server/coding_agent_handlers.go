@@ -39,6 +39,9 @@ func (s *Server) handleCodingAgentRun(c echo.Context) error {
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Minute)
 	defer cancel()
 	session, runErr := s.codingAgentService.Run(ctx, req, content)
+	if session == nil {
+		return echo.NewHTTPError(http.StatusBadRequest, runErr.Error())
+	}
 	status := http.StatusOK
 	if runErr != nil {
 		status = http.StatusInternalServerError
@@ -81,7 +84,7 @@ func (s *Server) readCodingAgentTarget(rootName, rawPath string) (string, error)
 	if err := validateRelativePath(rawPath); err != nil {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "パスが不正です")
 	}
-	ctx, err := s.rootByName(rootName)
+	ctx, err := s.writeRootByName(rootName)
 	if err != nil {
 		return "", err
 	}
@@ -101,12 +104,36 @@ func (s *Server) readCodingAgentTarget(rootName, rawPath string) (string, error)
 	if info.IsDir() {
 		return "", echo.NewHTTPError(http.StatusBadRequest, "ディレクトリは対象にできません")
 	}
+	resolvedBase, err := filepath.EvalSymlinks(absBase)
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusInternalServerError, "rootの確認に失敗しました")
+	}
+	resolvedFile, err := filepath.EvalSymlinks(absFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", echo.NewHTTPError(http.StatusNotFound, "対象ファイルが見つかりません")
+		}
+		return "", echo.NewHTTPError(http.StatusForbidden, "対象ファイルはroot配下に限定されます")
+	}
+	relResolved, relResolvedErr := filepath.Rel(resolvedBase, resolvedFile)
+	if relResolvedErr != nil || relResolved == ".." || strings.HasPrefix(relResolved, ".."+string(filepath.Separator)) {
+		return "", echo.NewHTTPError(http.StatusForbidden, "対象ファイルはroot配下に限定されます")
+	}
 	if info.Size() > 1024*1024 {
 		return "", echo.NewHTTPError(http.StatusRequestEntityTooLarge, "対象ファイルが大きすぎます")
 	}
-	data, err := os.ReadFile(absFile)
+	data, err := os.ReadFile(resolvedFile)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "対象ファイルの読み込みに失敗しました")
 	}
 	return string(data), nil
+}
+
+func (s *Server) writeRootByName(rootName string) (*rootCtx, error) {
+	for i := range s.writeRoots {
+		if s.writeRoots[i].id == rootName {
+			return &s.writeRoots[i].ctx, nil
+		}
+	}
+	return nil, echo.NewHTTPError(http.StatusBadRequest, "書き込みルートが設定されていません")
 }

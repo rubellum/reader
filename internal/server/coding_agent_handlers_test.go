@@ -60,7 +60,7 @@ func TestCodingAgentRunAndSessions(t *testing.T) {
 	if runResp.SessionID == "" || runResp.CodexSessionID != "server-codex-session" || runResp.Status != "completed" {
 		t.Fatalf("unexpected response: %#v", runResp)
 	}
-	if !containsArgSequence(runner.args, []string{"exec", "--json", "-C", srv.codingAgentService.ProjectRoot, "--sandbox", "workspace-write", "-"}) {
+	if !containsArgSequence(runner.args, []string{"exec", "--json", "-C", srv.writeRoots[0].ctx.basePath, "--sandbox", "workspace-write", "-"}) {
 		t.Fatalf("unexpected args: %#v", runner.args)
 	}
 	if !strings.Contains(runner.stdin, "writings/example.md") || !strings.Contains(runner.stdin, "@@fix") || !strings.Contains(runner.stdin, "@@ fix too") {
@@ -98,6 +98,50 @@ func TestCodingAgentRunRejectsBadPath(t *testing.T) {
 	srv.echo.ServeHTTP(rec, req)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestCodingAgentRunRejectsReadRoot(t *testing.T) {
+	read := t.TempDir()
+	if err := os.WriteFile(filepath.Join(read, "example.md"), []byte("text"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	srv := NewWithOptions(Options{
+		ReadBasePath:      read,
+		CodingAgentRunner: &codingAgentFakeRunner{},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/coding-agent/run", strings.NewReader(`{"root":"read","path":"example.md","mode":"annotation-proofread"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestCodingAgentRunRejectsSymlinkOutsideRoot(t *testing.T) {
+	read := t.TempDir()
+	write := t.TempDir()
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret.md"), []byte("secret"), 0o644); err != nil {
+		t.Fatalf("write outside file: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.md"), filepath.Join(write, "linked.md")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	srv := NewWithOptions(Options{
+		ReadBasePath:      read,
+		WriteBasePath:     write,
+		CodingAgentRunner: &codingAgentFakeRunner{},
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/coding-agent/run", strings.NewReader(`{"root":"write","path":"linked.md","mode":"annotation-proofread"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
 
