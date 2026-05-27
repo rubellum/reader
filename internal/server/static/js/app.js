@@ -1272,11 +1272,12 @@ function showCopyButtonStatus(btn, message, isError = false) {
   btn.dataset.defaultText = original;
   btn.textContent = message;
   btn.classList.toggle('copied', !isError);
+  btn.classList.toggle('copy-error', isError);
   clearTimeout(showCopyButtonStatus._timers?.[btn.id]);
   showCopyButtonStatus._timers = showCopyButtonStatus._timers || {};
   showCopyButtonStatus._timers[btn.id] = setTimeout(() => {
     btn.textContent = original;
-    btn.classList.remove('copied');
+    btn.classList.remove('copied', 'copy-error');
   }, 1500);
 }
 
@@ -2373,6 +2374,8 @@ async function loadEditFile(path) {
     filenameEl.textContent = root && root.name ? `${root.name}/${path}` : path;
     const copyBtn = document.getElementById('edit-copy-btn');
     if (copyBtn) copyBtn.disabled = false;
+    const proofreadBtn = document.getElementById('edit-proofread-btn');
+    if (proofreadBtn) proofreadBtn.disabled = false;
     setPathCopyIconEnabled(document.getElementById('edit-path-copy-icon'), true);
     empty.classList.add('hidden');
     textarea.classList.remove('hidden');
@@ -2410,6 +2413,51 @@ async function saveCurrentEdit({ silent = false } = {}) {
   }
 }
 
+async function runAnnotationProofread() {
+  if (!currentEditFile) return;
+  const targetRoot = currentEditRoot;
+  const targetPath = currentEditFile;
+  const proofreadBtn = document.getElementById('edit-proofread-btn');
+  const originalText = proofreadBtn ? proofreadBtn.textContent : '';
+  if (proofreadBtn) {
+    proofreadBtn.disabled = true;
+    proofreadBtn.textContent = '添削中';
+  }
+  try {
+    await saveCurrentEdit({ silent: true });
+    const res = await fetch('/api/coding-agent/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        root: targetRoot,
+        path: targetPath,
+        instruction: 'アノテーションに従って本文を添削してください',
+        mode: 'annotation-proofread',
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(payload.message || `status ${res.status}`);
+    }
+    await loadWriteTree(targetRoot);
+    if (currentEditRoot === targetRoot && currentEditFile === targetPath && !editDirty) {
+      await loadEditFile(targetPath);
+    }
+    if (currentDocument === targetPath) {
+      await loadFile(targetPath);
+    }
+    showEditStatus(payload.status === 'failed' ? '添削が失敗しました' : '添削が完了しました', payload.status === 'failed');
+  } catch (e) {
+    console.error('添削に失敗しました:', e);
+    showEditStatus('添削に失敗しました', true);
+  } finally {
+    if (proofreadBtn) {
+      proofreadBtn.textContent = originalText || '添削';
+      proofreadBtn.disabled = !currentEditFile;
+    }
+  }
+}
+
 function clearEditSelection() {
   document.querySelectorAll('.sidebar-section-write .file-item.selected').forEach(el => {
     el.classList.remove('selected');
@@ -2422,6 +2470,7 @@ function clearEditSelection() {
   const filenameEl = document.getElementById('edit-filename');
   const saveBtn = document.getElementById('edit-save-btn');
   const copyBtn = document.getElementById('edit-copy-btn');
+  const proofreadBtn = document.getElementById('edit-proofread-btn');
   if (textarea) {
     textarea.value = '';
     textarea.classList.add('hidden');
@@ -2433,6 +2482,7 @@ function clearEditSelection() {
   }
   if (saveBtn) saveBtn.disabled = true;
   if (copyBtn) copyBtn.disabled = true;
+  if (proofreadBtn) proofreadBtn.disabled = true;
 }
 
 // 編集ヘッダーに一時的なステータスを表示（数秒で消える）
