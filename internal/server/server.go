@@ -79,6 +79,8 @@ type Server struct {
 	include    []string
 	exclude    []string
 	archiveDir string
+	prCache    *pullRequestCache
+	prRunner   ghRunner
 }
 
 // RootOption は1つの閲覧ルートの設定を表す。
@@ -118,6 +120,8 @@ func NewWithOptions(opts Options) *Server {
 		include:    opts.Include,
 		exclude:    opts.Exclude,
 		archiveDir: opts.ArchiveDir,
+		prCache:    newPullRequestCache(),
+		prRunner:   defaultGHRunner{},
 	}
 	if s.archiveDir == "" {
 		s.archiveDir = "archive"
@@ -229,6 +233,7 @@ func (s *Server) setupRoutes() {
 	s.echo.GET("/api/worktrees", s.handleWorktrees)
 	s.echo.GET("/api/diff", s.handleDiff)
 	s.echo.GET("/api/raw", s.handleRaw)
+	s.echo.GET("/api/pull-requests", s.handlePullRequests)
 	s.echo.GET("/html/:root/*", s.handleHTMLPreview)
 
 	// 静的ファイル

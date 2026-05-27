@@ -28,6 +28,18 @@
         <button type="button" class="unread-filter-tab" data-mode="unread" onclick="setUnreadFilterMode('unread')">未読 <span id="unread-total-count">0</span></button>
       </div>
 
+      <!-- Pull requests: gh から取得した自分の作業が必要なPR -->
+      <div class="sidebar-section sidebar-section-pr" id="sidebar-section-pr">
+        <div class="sidebar-section-title">
+          <span class="sidebar-section-title-text">pull requests</span>
+          <span class="unread-count-badge hidden" id="pr-unread-count">0</span>
+          <span class="tree-actions">
+            <button type="button" class="tree-action-btn" id="toggle-pr-section-btn" onclick="toggleSidebarSection('pr')" title="pull requestsを非表示">▾</button>
+          </span>
+        </div>
+        <nav class="file-list pr-list" id="pr-list"></nav>
+      </div>
+
       <!-- 上半分: 閲覧ツリー -->
       <div class="sidebar-section sidebar-section-read" id="sidebar-section-read">
         <div class="sidebar-section-title">

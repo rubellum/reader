@@ -177,7 +177,7 @@ let r = JSON.parse(process.env.RESULT);
 if (typeof r === "string") r = JSON.parse(r);
 const eq = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function assert(ok, msg) { if (!ok) throw new Error(msg + "\n" + JSON.stringify(r, null, 2)); }
-assert(eq(r.sectionTitles, ["readings", "writings"]), "section bars should be singular");
+assert(eq(r.sectionTitles, ["pull requests", "readings", "writings"]), "section bars should be singular");
 assert(eq(r.readRoots, ["read-a", "read-b"]), "read accordions should follow command order");
 assert(eq(r.writeRoots, ["write-a", "write-b"]), "write accordions should follow command order");
 assert(eq(r.firstReadFiles, ["zeta.md", "alpha.md", "zeta.md", "alpha.md"]), "read-r tree should be descending");
