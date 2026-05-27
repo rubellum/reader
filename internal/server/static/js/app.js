@@ -14,6 +14,9 @@ const collapsedReadDirsByRoot = {};
 let unreadFilterMode = 'all';
 let readState = { schema: 1, scopes: {} };
 const readMetaByScope = {};
+let pullRequests = [];
+let pullRequestsEnabled = true;
+let pullRequestsError = '';
 
 // ===== 編集側の状態（-write 指定時のみ有効） =====
 let writeEnabled = false;
@@ -259,8 +262,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ポーリング開始
+  loadPullRequests();
   startPolling();
   startTreePolling();
+  startPullRequestPolling();
 });
 
 // パスからファイルを選択（URL復元用）
@@ -340,6 +345,189 @@ async function loadWriteTree(rootId = firstWriteRootId()) {
   }
 }
 
+async function loadPullRequests() {
+  try {
+    const res = await fetch('/api/pull-requests');
+    if (!res.ok) throw new Error('pull request fetch failed');
+    const data = await res.json();
+    pullRequestsEnabled = data.enabled !== false;
+    pullRequestsError = data.errorMessage || '';
+    pullRequests = Array.isArray(data.items) ? data.items : [];
+    applyPullRequestMeta();
+    renderPullRequests();
+  } catch (err) {
+    pullRequestsEnabled = false;
+    pullRequestsError = 'pull requestsの取得に失敗しました';
+    console.error('pull requestsの取得に失敗しました:', err);
+    renderPullRequests();
+  }
+}
+
+function applyPullRequestMeta() {
+  const files = pullRequests.map(pr => ({
+    path: pr.id,
+    modifiedAtMs: Number(pr.versionMs) || 0,
+    size: Number(pr.versionSize) || 0,
+  }));
+  readMetaByScope[PULL_REQUEST_SCOPE] = files;
+  ensurePullRequestScope(files, { initializeCurrent: true });
+  gcReadScope(PULL_REQUEST_SCOPE, files);
+  saveReadState();
+  updateUnreadControls();
+}
+
+function pullRequestUnreadCount() {
+  return (readMetaByScope[PULL_REQUEST_SCOPE] || []).reduce((count, file) => {
+    return count + (isPullRequestPathUnread(file.path) ? 1 : 0);
+  }, 0);
+}
+
+function isPullRequestUnread(pr) {
+  return pr && isPullRequestPathUnread(pr.id);
+}
+
+function ensurePullRequestScope(files = [], opts = {}) {
+  const stateScope = ensureReadScope(PULL_REQUEST_SCOPE, files);
+  if (opts.initializeCurrent && !stateScope.seenPathMode) {
+    if (Object.keys(stateScope.files).length === 0) {
+      const now = Date.now();
+      files.forEach(file => {
+        stateScope.files[file.path] = {
+          lastReadAtMs: now,
+          version: {
+            modifiedAtMs: Number(file.modifiedAtMs) || 0,
+            size: Number(file.size) || 0,
+          },
+        };
+      });
+    }
+    stateScope.seenPathMode = true;
+  }
+  return stateScope;
+}
+
+function isPullRequestPathUnread(path) {
+  const meta = fileMetaByPath(PULL_REQUEST_SCOPE, path);
+  if (!meta) return false;
+  const stateScope = ensurePullRequestScope(readMetaByScope[PULL_REQUEST_SCOPE] || []);
+  const entry = stateScope.files[path];
+  if (!entry) return true;
+  return versionsDiffer(meta, entry.version);
+}
+
+function markPullRequestRead(pr) {
+  if (!pr) return;
+  const meta = {
+    path: pr.id,
+    modifiedAtMs: Number(pr.versionMs) || 0,
+    size: Number(pr.versionSize) || 0,
+  };
+  const scopeMeta = readMetaByScope[PULL_REQUEST_SCOPE] || [];
+  const idx = scopeMeta.findIndex(file => file.path === pr.id);
+  if (idx >= 0) scopeMeta[idx] = meta;
+  else scopeMeta.push(meta);
+  readMetaByScope[PULL_REQUEST_SCOPE] = scopeMeta;
+  const stateScope = ensurePullRequestScope(scopeMeta);
+  stateScope.files[pr.id] = {
+    lastReadAtMs: Date.now(),
+    version: {
+      modifiedAtMs: Number(meta.modifiedAtMs) || 0,
+      size: Number(meta.size) || 0,
+    },
+  };
+  gcReadScope(PULL_REQUEST_SCOPE, scopeMeta);
+  saveReadState();
+  renderPullRequests();
+  updateUnreadControls();
+}
+
+function renderPullRequests() {
+  const container = document.getElementById('pr-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const unreadCount = pullRequestUnreadCount();
+  const badge = document.getElementById('pr-unread-count');
+  if (badge) {
+    badge.textContent = String(unreadCount);
+    badge.classList.toggle('hidden', unreadCount === 0);
+  }
+
+  if (!pullRequestsEnabled && pullRequests.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'file-filter-empty';
+    empty.textContent = pullRequestsError || 'pull requestsを取得できません';
+    container.appendChild(empty);
+    return;
+  }
+
+  const keyword = currentFilterKeyword.toLowerCase();
+  let items = pullRequests.slice();
+  if (unreadFilterMode === 'unread') {
+    items = items.filter(isPullRequestUnread);
+  }
+  if (keyword) {
+    items = items.filter(pr =>
+      String(pr.number || '').includes(keyword) ||
+      (pr.title || '').toLowerCase().includes(keyword) ||
+      (pr.author || '').toLowerCase().includes(keyword) ||
+      (pr.status || '').toLowerCase().includes(keyword)
+    );
+  }
+
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'file-filter-empty';
+    empty.textContent = unreadFilterMode === 'unread' ? '未読PRはありません' : '要対応PRはありません';
+    container.appendChild(empty);
+    return;
+  }
+
+  items.forEach(pr => {
+    const item = document.createElement('div');
+    item.className = 'file-item pr-item';
+    item.dataset.path = pr.id;
+    if (isPullRequestUnread(pr)) {
+      item.classList.add('unread');
+      item.title = '未読';
+    }
+
+    const unreadDot = document.createElement('span');
+    unreadDot.className = 'unread-dot';
+    unreadDot.setAttribute('aria-hidden', 'true');
+    item.appendChild(unreadDot);
+
+    const label = document.createElement('span');
+    label.className = 'file-label pr-label';
+
+    const title = document.createElement('span');
+    title.className = 'file-name pr-title';
+    const titleText = `#${pr.number} ${pr.title || ''}`.trim();
+    if (keyword) appendHighlightedText(title, titleText, keyword);
+    else title.textContent = titleText;
+    label.appendChild(title);
+
+    const meta = document.createElement('span');
+    meta.className = 'pr-meta';
+    meta.textContent = [pr.status, pr.author ? `by ${pr.author}` : ''].filter(Boolean).join(' · ');
+    label.appendChild(meta);
+    item.appendChild(label);
+
+    item.addEventListener('click', () => {
+      markPullRequestRead(pr);
+      const opened = window.open(pr.url, '_blank');
+      if (opened) {
+        opened.opener = null;
+        if (typeof opened.focus === 'function') opened.focus();
+      } else {
+        window.location.href = pr.url;
+      }
+    });
+
+    container.appendChild(item);
+  });
+}
+
 // サーバから設定取得
 async function loadConfig() {
   const res = await fetch('/api/config');
@@ -417,22 +605,25 @@ function ensureWriteSections() {
 }
 
 function sidebarSectionByName(name) {
-  return document.getElementById(name === 'write' ? 'sidebar-section-write' : 'sidebar-section-read');
+  if (name === 'write') return document.getElementById('sidebar-section-write');
+  if (name === 'pr') return document.getElementById('sidebar-section-pr');
+  return document.getElementById('sidebar-section-read');
 }
 
 function sidebarSectionHiddenKey(name) {
-  return name === 'write' ? WRITE_SECTION_HIDDEN_KEY : READ_SECTION_HIDDEN_KEY;
+  if (name === 'write') return WRITE_SECTION_HIDDEN_KEY;
+  if (name === 'pr') return PR_SECTION_HIDDEN_KEY;
+  return READ_SECTION_HIDDEN_KEY;
 }
 
 function updateSidebarSectionToggle(name) {
   const section = sidebarSectionByName(name);
-  const btn = document.getElementById(name === 'write' ? 'toggle-write-section-btn' : 'toggle-read-section-btn');
+  const btn = document.getElementById(name === 'write' ? 'toggle-write-section-btn' : (name === 'pr' ? 'toggle-pr-section-btn' : 'toggle-read-section-btn'));
   if (!section || !btn) return;
   const hidden = section.classList.contains('section-hidden');
+  const label = name === 'write' ? 'writings' : (name === 'pr' ? 'pull requests' : 'readings');
   btn.textContent = hidden ? '▸' : '▾';
-  btn.title = hidden
-    ? `${name === 'write' ? 'writings' : 'readings'}を表示`
-    : `${name === 'write' ? 'writings' : 'readings'}を非表示`;
+  btn.title = hidden ? `${label}を表示` : `${label}を非表示`;
 }
 
 function updateSidebarSectionResizerVisibility() {
@@ -1190,6 +1381,7 @@ function initFileFilter() {
     }
     renderAllReadTrees();
     renderAllWriteTrees();
+    renderPullRequests();
   };
 
   input.addEventListener('input', apply);
@@ -1587,6 +1779,16 @@ function startTreePolling() {
   }, 5000);
 }
 
+function startPullRequestPolling() {
+  setInterval(async () => {
+    try {
+      await loadPullRequests();
+    } catch (err) {
+      // loadPullRequests 内で表示状態を更新するため、ここでは無視する
+    }
+  }, 60000);
+}
+
 // 選択状態を復元（指定コンテナ内のみハイライト）
 function restoreSelectionIn(containerId, path) {
   const container = document.getElementById(containerId);
@@ -1623,6 +1825,8 @@ const DIR_FILTER_KEY = 'reader.dirFilter';
 const KEYWORD_FILTER_KEY = 'reader.keywordFilter';
 const UNREAD_FILTER_MODE_KEY = 'reader.unreadFilterMode';
 const READ_STATE_KEY = 'reader.readState.v1';
+const PR_SECTION_HIDDEN_KEY = 'reader.prSectionHidden';
+const PULL_REQUEST_SCOPE = 'pull-requests';
 const READ_STATE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 const READ_STATE_MAX_FILES_PER_SCOPE = 5000;
 const SIDEBAR_MIN_WIDTH = 120;
@@ -1715,7 +1919,7 @@ function unreadCountForScope(scope) {
 }
 
 function totalUnreadCount() {
-  return readRoots.reduce((count, root) => count + unreadCountForScope(readScopeKey(root.id)), 0);
+  return readRoots.reduce((count, root) => count + unreadCountForScope(readScopeKey(root.id)), 0) + pullRequestUnreadCount();
 }
 
 function markRead(rootId, path, meta = null) {
@@ -1754,6 +1958,7 @@ function setUnreadFilterMode(mode) {
   lsSet(UNREAD_FILTER_MODE_KEY, unreadFilterMode);
   updateUnreadControls();
   renderAllReadTrees();
+  renderPullRequests();
 }
 
 function updateUnreadControls() {
@@ -1810,6 +2015,7 @@ function restoreSidebarPersistedState() {
 
   setSidebarSectionHidden('read', lsGet(READ_SECTION_HIDDEN_KEY) === '1');
   setSidebarSectionHidden('write', lsGet(WRITE_SECTION_HIDDEN_KEY) === '1');
+  setSidebarSectionHidden('pr', lsGet(PR_SECTION_HIDDEN_KEY) === '1');
 }
 
 function initSidebarResizer() {

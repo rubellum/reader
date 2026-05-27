@@ -81,6 +81,8 @@ type Server struct {
 	exclude            []string
 	archiveDir         string
 	codingAgentService *codingagent.Service
+	prCache            *pullRequestCache
+	prRunner           ghRunner
 }
 
 // RootOption は1つの閲覧ルートの設定を表す。
@@ -121,6 +123,8 @@ func NewWithOptions(opts Options) *Server {
 		include:    opts.Include,
 		exclude:    opts.Exclude,
 		archiveDir: opts.ArchiveDir,
+		prCache:    newPullRequestCache(),
+		prRunner:   defaultGHRunner{},
 	}
 	if s.archiveDir == "" {
 		s.archiveDir = "archive"
@@ -242,6 +246,7 @@ func (s *Server) setupRoutes() {
 	s.echo.POST("/api/coding-agent/run", s.handleCodingAgentRun)
 	s.echo.GET("/api/coding-agent/sessions", s.handleCodingAgentSessions)
 	s.echo.GET("/api/coding-agent/sessions/:sessionID", s.handleCodingAgentSession)
+	s.echo.GET("/api/pull-requests", s.handlePullRequests)
 	s.echo.GET("/html/:root/*", s.handleHTMLPreview)
 
 	// 静的ファイル

@@ -257,6 +257,11 @@ body.resizing-sidebar {
   border-top: 1px solid #e5e7eb;
 }
 
+.sidebar-section-pr {
+  flex: 0 0 auto;
+  max-height: 35%;
+}
+
 /* 編集セクション非表示時は閲覧セクションが残りスペース全部 */
 .sidebar-section-write.hidden + /* nothing */ .sidebar-section-read {
   /* fallback unused */
@@ -653,6 +658,37 @@ body.resizing-sidebar-section {
 
 .file-item.selected {
   background-color: #dbeafe;
+}
+
+.pr-list {
+  padding-top: 6px;
+}
+
+.pr-item {
+  align-items: flex-start;
+}
+
+.pr-label {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.pr-title {
+  max-width: 100%;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.pr-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.3;
 }
 
 .hidden {
