@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/rubellum/reader/internal/codingagent"
 	"github.com/rubellum/reader/internal/diff"
 	"github.com/rubellum/reader/internal/document"
 	"github.com/rubellum/reader/internal/tree"
@@ -73,12 +74,13 @@ func (c *rootCtx) worktreeBaseDir(wt *worktree.Worktree) string {
 // Server はHTTPサーバーを表す。
 // readRoots は閲覧用ルート、write はオプショナルな編集用ルート。
 type Server struct {
-	echo       *echo.Echo
-	readRoots  []readRoot
-	writeRoots []readRoot
-	include    []string
-	exclude    []string
-	archiveDir string
+	echo               *echo.Echo
+	readRoots          []readRoot
+	writeRoots         []readRoot
+	include            []string
+	exclude            []string
+	archiveDir         string
+	codingAgentService *codingagent.Service
 }
 
 // RootOption は1つの閲覧ルートの設定を表す。
@@ -101,6 +103,7 @@ type Options struct {
 	ExtraReadSortDesc bool
 	WriteSortDesc     bool
 	ArchiveDir        string
+	CodingAgentRunner codingagent.Runner
 }
 
 // NewWithOptions は閲覧用ルート、追加閲覧ルート、書き込みルートを持つServerを作成する。
@@ -157,6 +160,9 @@ func NewWithOptions(opts Options) *Server {
 			ctx:      newRootCtx(ro.BasePath),
 			sortDesc: ro.SortDesc,
 		})
+	}
+	if len(s.readRoots) > 0 {
+		s.codingAgentService = codingagent.NewService(s.readRoots[0].ctx.gitRoot, opts.CodingAgentRunner)
 	}
 
 	s.setupRoutes()
@@ -229,6 +235,9 @@ func (s *Server) setupRoutes() {
 	s.echo.GET("/api/worktrees", s.handleWorktrees)
 	s.echo.GET("/api/diff", s.handleDiff)
 	s.echo.GET("/api/raw", s.handleRaw)
+	s.echo.POST("/api/coding-agent/run", s.handleCodingAgentRun)
+	s.echo.GET("/api/coding-agent/sessions", s.handleCodingAgentSessions)
+	s.echo.GET("/api/coding-agent/sessions/:sessionID", s.handleCodingAgentSession)
 	s.echo.GET("/html/:root/*", s.handleHTMLPreview)
 
 	// 静的ファイル

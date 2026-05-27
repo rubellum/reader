@@ -53,6 +53,7 @@
         </div>
         <nav class="file-list" id="write-file-list"></nav>
       </div>
+
     </aside>
     <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を変更"></div>
     <button class="sidebar-open-btn hidden" id="sidebar-open-btn" onclick="toggleSidebar()" title="サイドバーを開く">›</button>
@@ -127,14 +128,16 @@
             </span>
           </span>
           <button class="pane-header-btn" id="edit-copy-btn" onclick="copyWriteContent().catch(()=>{})" title="ファイルの内容をコピー" disabled>コピー</button>
+          <button class="pane-header-btn btn-update" id="edit-proofread-btn" onclick="runAnnotationProofread().catch(()=>{})" title="アノテーションに従って添削" disabled>添削</button>
           <span class="edit-status hidden" id="edit-status"></span>
-          <button class="pane-header-btn" id="edit-save-btn" onclick="saveCurrentEdit().catch(()=>{})" disabled>保存</button>
+          <button class="pane-header-btn btn-update" id="edit-save-btn" onclick="saveCurrentEdit().catch(()=>{})" disabled>保存</button>
         </div>
         <div class="edit-area" id="edit-area">
           <div class="empty-state" id="edit-empty-state">編集するファイルを下のツリーから選択</div>
           <textarea class="edit-textarea hidden" id="edit-textarea" spellcheck="false" autocomplete="off"></textarea>
         </div>
       </section>
+
       </main>
     </div>
   </div>

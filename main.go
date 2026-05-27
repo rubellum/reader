@@ -107,6 +107,7 @@ var (
 		"node_modules/*",
 		"vendor/*",
 		".git/*",
+		".reader/*",
 		"__pycache__/*",
 		".venv/*",
 		"venv/*",
