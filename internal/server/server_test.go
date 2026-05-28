@@ -99,6 +99,22 @@ func TestHandleDiffNonGitRootReturnsGitOnlyMessage(t *testing.T) {
 	}
 }
 
+func TestHandleWorktreesNonGitRootReturnsGitOnlyMessage(t *testing.T) {
+	root := t.TempDir()
+	srv := newTestServer(root, []string{"*.md"}, nil, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/worktrees", nil)
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Gitリポジトリ内でのみ利用できます") {
+		t.Fatalf("expected git-only message, got %s", rec.Body.String())
+	}
+}
+
 func TestHandleTreeGitRepo(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

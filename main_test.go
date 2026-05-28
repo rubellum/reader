@@ -238,20 +238,26 @@ func TestMainStartsWithNonGitDirectoryAndServesFile(t *testing.T) {
 		default:
 		}
 
-		resp, err := client.Get(url)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			time.Sleep(50 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
 			t.Fatalf("unexpected status: %d body=%s", resp.StatusCode, string(body))
 		}
 		var doc document.Document
 		if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+			resp.Body.Close()
 			t.Fatalf("decode document: %v", err)
 		}
+		resp.Body.Close()
 		if doc.Path != "note.md" {
 			t.Fatalf("expected note.md, got %s", doc.Path)
 		}

@@ -866,6 +866,9 @@ func (s *Server) handleWorktrees(c echo.Context) error {
 	if err != nil {
 		return err
 	}
+	if !ctx.isGitRepo {
+		return echo.NewHTTPError(http.StatusBadRequest, "この機能はGitリポジトリ内でのみ利用できます")
+	}
 	path := c.QueryParam("path")
 
 	var worktrees []worktree.Worktree
