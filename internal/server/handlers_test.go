@@ -523,6 +523,9 @@ func TestWriteRootDisabled(t *testing.T) {
 	if cfg["writeEnabled"] != false {
 		t.Fatalf("expected writeEnabled=false, got %v", cfg["writeEnabled"])
 	}
+	if cfg["pullRequestsEnabled"] != false {
+		t.Fatalf("expected pullRequestsEnabled=false, got %v", cfg["pullRequestsEnabled"])
+	}
 
 	resp2 := mustGet(t, ts.URL+"/api/tree?root=write")
 	defer resp2.Body.Close()

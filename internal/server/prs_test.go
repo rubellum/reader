@@ -194,6 +194,7 @@ func TestPullRequestVersionSizeIncludesActionableState(t *testing.T) {
 
 func TestHandlePullRequestsUsesOneMinuteCache(t *testing.T) {
 	srv := newTestServer(t.TempDir(), nil, nil, false)
+	srv.pullRequestsEnabled = true
 	runner := &fakeGHRunner{outputs: map[string]string{
 		"review-requested:@me": `[{"number":1,"title":"Review","url":"https://github.com/o/r/pull/1","author":{"login":"alice"},"updatedAt":"2026-05-26T10:00:00Z"}]`,
 		"assignee:@me":         `[]`,
@@ -223,6 +224,33 @@ func TestHandlePullRequestsUsesOneMinuteCache(t *testing.T) {
 
 	if got := runner.callCount(); got != 3 {
 		t.Fatalf("gh call count = %d, want 3", got)
+	}
+}
+
+func TestHandlePullRequestsDisabledDoesNotCallGH(t *testing.T) {
+	srv := newTestServer(t.TempDir(), nil, nil, false)
+	runner := &fakeGHRunner{}
+	srv.prRunner = runner
+	ts := httptest.NewServer(srv.echo)
+	t.Cleanup(ts.Close)
+
+	resp := mustGet(t, ts.URL+"/api/pull-requests")
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var payload pullRequestResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if payload.Enabled {
+		t.Fatalf("expected pull requests disabled, got %+v", payload)
+	}
+	if len(payload.Items) != 0 {
+		t.Fatalf("items = %d, want 0", len(payload.Items))
+	}
+	if got := runner.callCount(); got != 0 {
+		t.Fatalf("gh call count = %d, want 0", got)
 	}
 }
 

@@ -136,6 +136,7 @@ func main() {
 	flag.Var(&verbosity, "v", "詳細ログ（-v, -vv, -vvv）")
 	configPath := flag.String("config", "", "設定ファイル（JSON）。未指定時は ./config.json を自動検出")
 	archiveDir := flag.String("archive", defaultArchiveDir, "アーカイブフォルダ")
+	pullRequests := flag.Bool("pull-requests", false, "GitHub Pull Request 一覧を表示する")
 	noOpen := flag.Bool("no-open", false, "起動時にブラウザを自動で開かない")
 
 	// カスタムUsage
@@ -168,6 +169,8 @@ func main() {
 		fmt.Printf("        設定ファイル（JSON）。未指定時は ./%s を自動検出\n", defaultConfigFile)
 		fmt.Println("  -archive string")
 		fmt.Printf("        アーカイブフォルダ (default %s)\n", defaultArchiveDir)
+		fmt.Println("  -pull-requests")
+		fmt.Println("        GitHub Pull Request 一覧を表示する")
 		fmt.Println("  -no-open")
 		fmt.Println("        起動時にブラウザを自動で開かない")
 		fmt.Println()
@@ -185,6 +188,7 @@ func main() {
 		fmt.Println("  reader -write /tmp/notes /path/to/repo       # 編集 UI 付きで起動")
 		fmt.Println("  reader -write /tmp/a -write-r /tmp/b .       # 指定順で編集ツリーを表示（/tmp/b は降順）")
 		fmt.Println("  reader -archive archived .                   # archived/ 配下にファイルをアーカイブ")
+		fmt.Println("  reader -pull-requests .                      # GitHub Pull Request 一覧を表示")
 		fmt.Println("  reader -vvv                                  # 詳細ログを有効化")
 		fmt.Println()
 		fmt.Println("Note:")
@@ -249,6 +253,9 @@ func main() {
 		}
 		if !setFlags["archive"] && cfg.Archive != nil {
 			*archiveDir = *cfg.Archive
+		}
+		if !setFlags["pull-requests"] && cfg.PullRequests != nil {
+			*pullRequests = *cfg.PullRequests
 		}
 		if !setFlags["v"] && cfg.Verbosity != nil {
 			verbosity = countFlag(*cfg.Verbosity)
@@ -369,12 +376,13 @@ func main() {
 
 	// サーバー起動（指定ディレクトリをルートとして使用、-read/-write 指定時は追加ルートも追加）
 	srv := server.NewWithOptions(server.Options{
-		ReadRoots:  readRootOptions,
-		WriteRoots: writeRootOptions,
-		Include:    effectiveInclude,
-		Exclude:    effectiveExclude,
-		Verbose:    verbosity > 0,
-		ArchiveDir: *archiveDir,
+		ReadRoots:           readRootOptions,
+		WriteRoots:          writeRootOptions,
+		Include:             effectiveInclude,
+		Exclude:             effectiveExclude,
+		Verbose:             verbosity > 0,
+		ArchiveDir:          *archiveDir,
+		PullRequestsEnabled: *pullRequests,
 	})
 
 	if !*noOpen {

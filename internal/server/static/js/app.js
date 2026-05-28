@@ -15,7 +15,8 @@ let unreadFilterMode = 'all';
 let readState = { schema: 1, scopes: {} };
 const readMetaByScope = {};
 let pullRequests = [];
-let pullRequestsEnabled = true;
+let pullRequestsConfigured = false;
+let pullRequestsEnabled = false;
 let pullRequestsError = '';
 
 // ===== 編集側の状態（-write 指定時のみ有効） =====
@@ -262,10 +263,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // ポーリング開始
-  loadPullRequests();
+  if (pullRequestsConfigured) {
+    loadPullRequests();
+    startPullRequestPolling();
+  }
   startPolling();
   startTreePolling();
-  startPullRequestPolling();
 });
 
 // パスからファイルを選択（URL復元用）
@@ -346,6 +349,15 @@ async function loadWriteTree(rootId = firstWriteRootId()) {
 }
 
 async function loadPullRequests() {
+  if (!pullRequestsConfigured) {
+    pullRequestsEnabled = false;
+    pullRequests = [];
+    pullRequestsError = '';
+    updatePullRequestSectionVisibility();
+    updateUnreadControls();
+    return;
+  }
+
   try {
     const res = await fetch('/api/pull-requests');
     if (!res.ok) throw new Error('pull request fetch failed');
@@ -445,6 +457,7 @@ function renderPullRequests() {
   const container = document.getElementById('pr-list');
   if (!container) return;
   container.innerHTML = '';
+  updatePullRequestSectionVisibility();
 
   const unreadCount = pullRequestUnreadCount();
   const badge = document.getElementById('pr-unread-count');
@@ -454,10 +467,6 @@ function renderPullRequests() {
   }
 
   if (!pullRequestsEnabled && pullRequests.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'file-filter-empty';
-    empty.textContent = pullRequestsError || 'pull requestsを取得できません';
-    container.appendChild(empty);
     return;
   }
 
@@ -534,6 +543,7 @@ async function loadConfig() {
   if (!res.ok) return;
   const cfg = await res.json();
   writeEnabled = !!cfg.writeEnabled;
+  pullRequestsConfigured = !!cfg.pullRequestsEnabled;
   if (Array.isArray(cfg.readRoots) && cfg.readRoots.length > 0) {
     readRoots = cfg.readRoots.map((root, i) => ({
       id: root.id || (i === 0 ? 'read' : `read-${i + 1}`),
@@ -554,6 +564,15 @@ async function loadConfig() {
   } else {
     writeRoots = [];
   }
+  updatePullRequestSectionVisibility();
+}
+
+function updatePullRequestSectionVisibility() {
+  const section = document.getElementById('sidebar-section-pr');
+  if (!section) return;
+  const available = pullRequestsConfigured && (pullRequestsEnabled || pullRequests.length > 0);
+  section.classList.toggle('hidden', !available);
+  if (available) updateSidebarSectionToggle('pr');
 }
 
 // 編集機能の有効/無効に応じてレイアウトを反映
@@ -1781,6 +1800,7 @@ function startTreePolling() {
 
 function startPullRequestPolling() {
   setInterval(async () => {
+    if (!pullRequestsConfigured) return;
     try {
       await loadPullRequests();
     } catch (err) {
@@ -1919,7 +1939,8 @@ function unreadCountForScope(scope) {
 }
 
 function totalUnreadCount() {
-  return readRoots.reduce((count, root) => count + unreadCountForScope(readScopeKey(root.id)), 0) + pullRequestUnreadCount();
+  const prCount = pullRequestsConfigured && pullRequestsEnabled ? pullRequestUnreadCount() : 0;
+  return readRoots.reduce((count, root) => count + unreadCountForScope(readScopeKey(root.id)), 0) + prCount;
 }
 
 function markRead(rootId, path, meta = null) {
