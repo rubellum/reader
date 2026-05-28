@@ -248,6 +248,7 @@ func TestStaticAssetsServed(t *testing.T) {
 		{name: "css", path: "/static/css/style.css", mustContain: ".sidebar"},
 		{name: "js", path: "/static/js/app.js", mustContain: "loadTree"},
 		{name: "index", path: "/", mustContain: `<link rel="icon" href="data:image/svg+xml,`},
+		{name: "index title", path: "/", mustContain: "<title>📖</title>"},
 	}
 
 	for _, tc := range cases {
