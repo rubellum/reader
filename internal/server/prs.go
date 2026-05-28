@@ -67,6 +67,13 @@ func newPullRequestCache() *pullRequestCache {
 }
 
 func (s *Server) handlePullRequests(c echo.Context) error {
+	if !s.pullRequestsEnabled {
+		return c.JSON(http.StatusOK, pullRequestResponse{
+			Enabled: false,
+			Items:   []pullRequestItem{},
+		})
+	}
+
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 10*time.Second)
 	defer cancel()
 

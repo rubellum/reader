@@ -2,7 +2,7 @@
 
 `reader` は、Markdown / テキストファイルをローカルブラウザで読むための軽量ビューアです。
 
-ファイルツリー、Markdown 表示、相対リンク/画像の解決に対応しています。Git リポジトリ内では、`main` ブランチとの差分表示も利用できます。`-write` を指定すると、指定したディレクトリを編集用ツリーとして開き、ブラウザから保存できます。GitHub CLI (`gh`) が利用できる環境では、サイドバーに自分の作業が必要な Pull Request も表示します。
+ファイルツリー、Markdown 表示、相対リンク/画像の解決に対応しています。Git リポジトリ内では、`main` ブランチとの差分表示も利用できます。`-write` を指定すると、指定したディレクトリを編集用ツリーとして開き、ブラウザから保存できます。`-pull-requests` を指定すると、GitHub CLI (`gh`) で取得できる場合だけサイドバーに自分の作業が必要な Pull Request も表示します。
 
 ## インストール
 
@@ -28,6 +28,7 @@ reader -read /path/to/reference -read-r /path/to/archive ./repo
 reader -write /path/to/notes ./repo
 reader -archive archived ./repo
 reader -write /path/to/notes -write-r /path/to/archive ./repo
+reader -pull-requests ./repo
 reader -no-open ./repo
 ```
 
@@ -42,6 +43,7 @@ reader -no-open ./repo
 - `-write`: 編集ツリーに表示するディレクトリです。複数指定できます。指定時に編集 UI が有効になります。
 - `-write-r`: 編集ツリーに表示するディレクトリです。複数指定できます。指定したディレクトリのサイドバーの並び順を降順にします。
 - `-archive`: アーカイブフォルダです。デフォルトは `archive` で、ファイルの相対パス構造を保ったまま移動します。
+- `-pull-requests`: GitHub Pull Request 一覧を表示します。`gh` で取得できない場合は表示しません。
 - `-config`: JSON 設定ファイルを指定します。未指定時は `./config.json` があれば読み込みます。
 - `-no-open`: 起動時にブラウザを自動で開きません。
 - `-v`: 詳細ログを出します。`-vv` / `-vvv` も指定できます。
@@ -50,7 +52,7 @@ reader -no-open ./repo
 
 ## Pull Requests
 
-`gh` がインストール済みかつログイン済みの場合、サイドバーの `pull requests` に以下の open PR が表示されます。
+`-pull-requests` を指定し、`gh` がインストール済みかつログイン済みの場合、サイドバーの `pull requests` に以下の open PR が表示されます。未指定時、または `gh` で取得できない場合、PR 一覧は表示されません。
 
 - 自分にレビュー依頼が来ている PR
 - 自分に assign されている PR
@@ -73,6 +75,7 @@ CLI 未指定の値は JSON 設定ファイルから読み込めます。CLI で
   "write": "/path/to/notes",
   "archive": "archive",
   "write-r": "/path/to/old-notes",
+  "pull-requests": false,
   "verbosity": 1,
   "dir": "/path/to/repo"
 }

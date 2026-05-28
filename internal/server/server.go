@@ -79,15 +79,16 @@ func (c *rootCtx) worktreeBaseDir(wt *worktree.Worktree) string {
 // Server はHTTPサーバーを表す。
 // readRoots は閲覧用ルート、write はオプショナルな編集用ルート。
 type Server struct {
-	echo               *echo.Echo
-	readRoots          []readRoot
-	writeRoots         []readRoot
-	include            []string
-	exclude            []string
-	archiveDir         string
-	codingAgentService *codingagent.Service
-	prCache            *pullRequestCache
-	prRunner           ghRunner
+	echo                *echo.Echo
+	readRoots           []readRoot
+	writeRoots          []readRoot
+	include             []string
+	exclude             []string
+	archiveDir          string
+	codingAgentService  *codingagent.Service
+	prCache             *pullRequestCache
+	prRunner            ghRunner
+	pullRequestsEnabled bool
 }
 
 // RootOption は1つの閲覧ルートの設定を表す。
@@ -98,19 +99,20 @@ type RootOption struct {
 
 // Options はサーバーが扱う各ルートと表示順の設定を表す。
 type Options struct {
-	ReadBasePath      string
-	ReadRoots         []RootOption
-	ExtraReadBasePath string
-	WriteBasePath     string
-	WriteRoots        []RootOption
-	Include           []string
-	Exclude           []string
-	Verbose           bool
-	ReadSortDesc      bool
-	ExtraReadSortDesc bool
-	WriteSortDesc     bool
-	ArchiveDir        string
-	CodingAgentRunner codingagent.Runner
+	ReadBasePath        string
+	ReadRoots           []RootOption
+	ExtraReadBasePath   string
+	WriteBasePath       string
+	WriteRoots          []RootOption
+	Include             []string
+	Exclude             []string
+	Verbose             bool
+	ReadSortDesc        bool
+	ExtraReadSortDesc   bool
+	WriteSortDesc       bool
+	ArchiveDir          string
+	CodingAgentRunner   codingagent.Runner
+	PullRequestsEnabled bool
 }
 
 // NewWithOptions は閲覧用ルート、追加閲覧ルート、書き込みルートを持つServerを作成する。
@@ -124,12 +126,13 @@ func NewWithOptions(opts Options) *Server {
 	}
 
 	s := &Server{
-		echo:       e,
-		include:    opts.Include,
-		exclude:    opts.Exclude,
-		archiveDir: opts.ArchiveDir,
-		prCache:    newPullRequestCache(),
-		prRunner:   defaultGHRunner{},
+		echo:                e,
+		include:             opts.Include,
+		exclude:             opts.Exclude,
+		archiveDir:          opts.ArchiveDir,
+		prCache:             newPullRequestCache(),
+		prRunner:            defaultGHRunner{},
+		pullRequestsEnabled: opts.PullRequestsEnabled,
 	}
 	if s.archiveDir == "" {
 		s.archiveDir = "archive"
@@ -278,15 +281,16 @@ func (s *Server) handleConfig(c echo.Context) error {
 		})
 	}
 	cfg := map[string]interface{}{
-		"writeEnabled":      len(s.writeRoots) > 0,
-		"extraReadEnabled":  len(s.readRoots) > 1,
-		"readRoots":         readRoots,
-		"writeRoots":        writeRoots,
-		"archiveDir":        s.archiveDir,
-		"readRootName":      "",
-		"readRootSortDesc":  false,
-		"writeRootSortDesc": false,
-		"extraReadSortDesc": false,
+		"writeEnabled":        len(s.writeRoots) > 0,
+		"extraReadEnabled":    len(s.readRoots) > 1,
+		"readRoots":           readRoots,
+		"writeRoots":          writeRoots,
+		"pullRequestsEnabled": s.pullRequestsEnabled,
+		"archiveDir":          s.archiveDir,
+		"readRootName":        "",
+		"readRootSortDesc":    false,
+		"writeRootSortDesc":   false,
+		"extraReadSortDesc":   false,
 	}
 	if len(s.readRoots) > 0 {
 		cfg["readRootName"] = filepath.Base(s.readRoots[0].ctx.basePath)

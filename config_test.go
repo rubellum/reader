@@ -20,6 +20,7 @@ func TestLoadConfig_AllFields(t *testing.T) {
 		"write": "/tmp/notes",
 		"write-r": "/tmp/notes-desc",
 		"archive": "archived",
+		"pull-requests": true,
 		"verbosity": 2,
 		"dir": "/tmp/repo"
 	}`
@@ -59,6 +60,9 @@ func TestLoadConfig_AllFields(t *testing.T) {
 	if cfg.Archive == nil || *cfg.Archive != "archived" {
 		t.Errorf("archive = %v, want archived", cfg.Archive)
 	}
+	if cfg.PullRequests == nil || *cfg.PullRequests != true {
+		t.Errorf("pull-requests = %v, want true", cfg.PullRequests)
+	}
 	if cfg.Verbosity == nil || *cfg.Verbosity != 2 {
 		t.Errorf("verbosity = %v, want 2", cfg.Verbosity)
 	}
@@ -86,6 +90,22 @@ func TestLoadConfig_PartialFields(t *testing.T) {
 	}
 	if cfg.Include != nil {
 		t.Errorf("include should be nil, got %v", cfg.Include)
+	}
+}
+
+func TestLoadConfig_PullRequestsFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"pull-requests": false}`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.PullRequests == nil || *cfg.PullRequests != false {
+		t.Fatalf("pull-requests = %v, want false", cfg.PullRequests)
 	}
 }
 

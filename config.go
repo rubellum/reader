@@ -9,17 +9,18 @@ import (
 // Config はコマンドライン引数と同じ設定を JSON で指定するための構造体。
 // CLI で明示指定された値が優先され、未指定時にこの値が適用される。
 type Config struct {
-	Host      *string  `json:"host,omitempty"`
-	Port      *int     `json:"port,omitempty"`
-	Include   []string `json:"include,omitempty"`
-	Exclude   []string `json:"exclude,omitempty"`
-	Read      *string  `json:"read,omitempty"`
-	ReadR     *string  `json:"read-r,omitempty"`
-	Write     *string  `json:"write,omitempty"`
-	WriteR    *string  `json:"write-r,omitempty"`
-	Archive   *string  `json:"archive,omitempty"`
-	Verbosity *int     `json:"verbosity,omitempty"`
-	Dir       *string  `json:"dir,omitempty"`
+	Host         *string  `json:"host,omitempty"`
+	Port         *int     `json:"port,omitempty"`
+	Include      []string `json:"include,omitempty"`
+	Exclude      []string `json:"exclude,omitempty"`
+	Read         *string  `json:"read,omitempty"`
+	ReadR        *string  `json:"read-r,omitempty"`
+	Write        *string  `json:"write,omitempty"`
+	WriteR       *string  `json:"write-r,omitempty"`
+	Archive      *string  `json:"archive,omitempty"`
+	PullRequests *bool    `json:"pull-requests,omitempty"`
+	Verbosity    *int     `json:"verbosity,omitempty"`
+	Dir          *string  `json:"dir,omitempty"`
 }
 
 // loadConfig は指定パスから JSON 設定を読み込む。
