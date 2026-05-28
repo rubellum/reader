@@ -31,10 +31,12 @@ var staticFS embed.FS
 // rootCtx はサーバーが扱うルートディレクトリの解決情報を保持する。
 // basePath はユーザーが指定したルートディレクトリ（API のパスはこの相対）。
 // gitRoot は git リポジトリのルート（worktree 操作・diff 用、git管理外なら basePath と同じ）。
+// isGitRepo は Git 専用 API を有効にできるかを表す。
 // relSubdir は basePath が gitRoot からどれだけ深い位置にあるか（"." なら同一）。
 type rootCtx struct {
 	basePath  string
 	gitRoot   string
+	isGitRepo bool
 	relSubdir string
 	renderer  *document.Renderer
 }
@@ -48,8 +50,10 @@ type readRoot struct {
 func newRootCtx(basePath string) rootCtx {
 	absBase := resolveAbs(basePath)
 	gitRoot := absBase
+	isGitRepo := false
 	if gr, err := worktree.GitRoot(absBase); err == nil {
 		gitRoot = resolveAbs(gr)
+		isGitRepo = true
 	}
 	relSubdir := "."
 	if rel, err := filepath.Rel(gitRoot, absBase); err == nil && rel != "" {
@@ -58,6 +62,7 @@ func newRootCtx(basePath string) rootCtx {
 	return rootCtx{
 		basePath:  absBase,
 		gitRoot:   gitRoot,
+		isGitRepo: isGitRepo,
 		relSubdir: relSubdir,
 		renderer:  document.NewRenderer(absBase),
 	}
@@ -331,7 +336,7 @@ func (s *Server) handleTree(c echo.Context) error {
 	// worktree 一覧取得（git root から取得することで basePath がサブディレクトリでも全 worktree を見られる）
 	worktrees, err := worktree.List(ctx.gitRoot)
 	if err != nil || len(worktrees) == 0 {
-		// worktree が取得できない場合はカレントの git ls-files を使用
+		// worktree が取得できない場合は通常のファイル列挙にフォールバックする
 		files, ferr := buildFileListFallback(ctx.basePath)
 		if ferr != nil {
 			return echo.NewHTTPError(http.StatusInternalServerError, "ファイル一覧の取得に失敗しました")
@@ -682,6 +687,9 @@ func (s *Server) handleArchive(c echo.Context) error {
 
 // handleFileFromWorktree は別のworktreeからファイルを取得する
 func (s *Server) handleFileFromWorktree(c echo.Context, ctx *rootCtx, path, worktreeName string) error {
+	if !ctx.isGitRepo {
+		return echo.NewHTTPError(http.StatusBadRequest, "この機能はGitリポジトリ内でのみ利用できます")
+	}
 	worktrees, err := worktree.List(ctx.gitRoot)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "worktreeの取得に失敗しました")
@@ -835,6 +843,9 @@ func (s *Server) resolveWorktreeBaseForCtx(ctx *rootCtx, worktreeName string) (s
 	if worktreeName == "" {
 		return ctx.basePath, nil
 	}
+	if !ctx.isGitRepo {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "この機能はGitリポジトリ内でのみ利用できます")
+	}
 	worktrees, err := worktree.List(ctx.gitRoot)
 	if err != nil {
 		return "", echo.NewHTTPError(http.StatusInternalServerError, "worktreeの取得に失敗しました")
@@ -890,6 +901,9 @@ func (s *Server) handleDiff(c echo.Context) error {
 	}
 	if err := validateRelativePath(path); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "パスが不正です")
+	}
+	if !ctx.isGitRepo {
+		return echo.NewHTTPError(http.StatusBadRequest, "この機能はGitリポジトリ内でのみ利用できます")
 	}
 
 	// worktree一覧を取得（git root から）

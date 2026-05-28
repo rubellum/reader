@@ -140,7 +140,7 @@ func main() {
 
 	// カスタムUsage
 	flag.Usage = func() {
-		fmt.Println("reader - Git リポジトリ用ドキュメントビューア")
+		fmt.Println("reader - Markdown / テキストファイル用ドキュメントビューア")
 		fmt.Println()
 		fmt.Println("Usage:")
 		fmt.Println("  reader [options] [directory]")
@@ -188,7 +188,7 @@ func main() {
 		fmt.Println("  reader -vvv                                  # 詳細ログを有効化")
 		fmt.Println()
 		fmt.Println("Note:")
-		fmt.Println("  Git リポジトリ必須。git ls-files で管理されたファイルのみ表示します。")
+		fmt.Println("  Git リポジトリでは git ls-files の結果を表示します。Git リポジトリ外では通常のファイル一覧を表示します。")
 		fmt.Println("  -include / -exclude のいずれも未指定時はデフォルト (*.md, *.txt, *.html, *.htm と")
 		fmt.Println("  node_modules/vendor などの定番除外) が適用されます。")
 	}
@@ -301,19 +301,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Git リポジトリの検出（diff 機能の前提）
-	gitRoot, err := worktree.GitRoot(targetDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "エラー: Git リポジトリではありません: %s\n", targetDir)
-		os.Exit(1)
-	}
-
 	// targetDir をルートディレクトリとして開く
 	absTargetDir, err := filepath.Abs(targetDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "エラー: パスの解決に失敗しました: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Git リポジトリの検出（diff/worktree 機能用）。Git 管理外でも閲覧は継続する。
+	gitRoot, inGitRepo := detectGitRoot(absTargetDir)
 
 	// -read の検証と絶対パス化。指定時は targetDir ではなく -read のみを閲覧ルートにする。
 	readRootOptions := []server.RootOption{{BasePath: absTargetDir}}
@@ -387,8 +383,10 @@ func main() {
 
 	fmt.Printf("reader サーバーを起動しました: %s\n", url)
 	fmt.Printf("ルートディレクトリ: %s\n", absTargetDir)
-	if absTargetDir != gitRoot {
+	if inGitRepo && absTargetDir != gitRoot {
 		fmt.Printf("Git root: %s\n", gitRoot)
+	} else if !inGitRepo {
+		fmt.Println("Git リポジトリ外として起動しました。Git 専用機能は無効です。")
 	}
 	if len(readRoots) > 0 {
 		for i, root := range readRootOptions {
@@ -416,6 +414,14 @@ func main() {
 		fmt.Fprintf(os.Stderr, "サーバーエラー: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func detectGitRoot(dir string) (string, bool) {
+	gitRoot, err := worktree.GitRoot(dir)
+	if err != nil {
+		return "", false
+	}
+	return gitRoot, true
 }
 
 // openBrowser はデフォルトブラウザでURLを開く（macOS用）
