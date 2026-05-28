@@ -246,6 +246,9 @@ func TestHandlePullRequestsDisabledDoesNotCallGH(t *testing.T) {
 	if payload.Enabled {
 		t.Fatalf("expected pull requests disabled, got %+v", payload)
 	}
+	if payload.Cached {
+		t.Fatalf("expected cached=false, got %+v", payload)
+	}
 	if len(payload.Items) != 0 {
 		t.Fatalf("items = %d, want 0", len(payload.Items))
 	}

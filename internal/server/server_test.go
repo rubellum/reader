@@ -80,6 +80,41 @@ func TestIsDiffTooLarge(t *testing.T) {
 	}
 }
 
+func TestHandleDiffNonGitRootReturnsGitOnlyMessage(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("# note"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+	srv := newTestServer(root, []string{"*.md"}, nil, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/diff?path=note.md", nil)
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Gitリポジトリ内でのみ利用できます") {
+		t.Fatalf("expected git-only message, got %s", rec.Body.String())
+	}
+}
+
+func TestHandleWorktreesNonGitRootReturnsGitOnlyMessage(t *testing.T) {
+	root := t.TempDir()
+	srv := newTestServer(root, []string{"*.md"}, nil, false)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/worktrees", nil)
+	rec := httptest.NewRecorder()
+	srv.echo.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Gitリポジトリ内でのみ利用できます") {
+		t.Fatalf("expected git-only message, got %s", rec.Body.String())
+	}
+}
+
 func TestHandleTreeGitRepo(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -248,6 +283,7 @@ func TestStaticAssetsServed(t *testing.T) {
 		{name: "css", path: "/static/css/style.css", mustContain: ".sidebar"},
 		{name: "js", path: "/static/js/app.js", mustContain: "loadTree"},
 		{name: "index", path: "/", mustContain: `<link rel="icon" href="data:image/svg+xml,`},
+		{name: "index title", path: "/", mustContain: "<title>📖</title>"},
 	}
 
 	for _, tc := range cases {

@@ -93,6 +93,22 @@ func TestLoadConfig_PartialFields(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_PullRequestsFalse(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(`{"pull-requests": false}`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.PullRequests == nil || *cfg.PullRequests != false {
+		t.Fatalf("pull-requests = %v, want false", cfg.PullRequests)
+	}
+}
+
 func TestLoadConfig_NotFound(t *testing.T) {
 	_, err := loadConfig(filepath.Join(t.TempDir(), "missing.json"))
 	if err == nil {

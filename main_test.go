@@ -1,11 +1,22 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
+	"io"
 	"net"
+	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
+
+	"github.com/rubellum/reader/internal/document"
 )
 
 func TestDefaultPatternsApplied(t *testing.T) {
@@ -162,6 +173,101 @@ func TestValidateOptionDirRejectsFile(t *testing.T) {
 	}
 }
 
+func TestMainStartsWithNonGitDirectoryAndServesFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("# Non Git Note"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+
+	port := freePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "go", "run", ".", "-no-open", "-host", "127.0.0.1", "-port", port, root)
+	cmd.Dir = "."
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start reader: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- cmd.Wait() }()
+	processExited := false
+	t.Cleanup(func() {
+		if !processExited {
+			cancel()
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			select {
+			case <-errCh:
+			case <-time.After(2 * time.Second):
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				<-errCh
+			}
+		}
+	})
+	stdoutCh := make(chan string, 1)
+	stderrCh := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(stdout)
+		stdoutCh <- string(b)
+	}()
+	go func() {
+		b, _ := io.ReadAll(stderr)
+		stderrCh <- string(b)
+	}()
+
+	url := "http://127.0.0.1:" + port + "/api/file?path=note.md"
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case err := <-errCh:
+			processExited = true
+			t.Fatalf("reader exited before serving non-git directory: %v\nstdout=%s\nstderr=%s", err, <-stdoutCh, <-stderrCh)
+		case <-deadline:
+			t.Fatalf("reader did not start for non-git directory within timeout")
+		default:
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			t.Fatalf("unexpected status: %d body=%s", resp.StatusCode, string(body))
+		}
+		var doc document.Document
+		if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
+			resp.Body.Close()
+			t.Fatalf("decode document: %v", err)
+		}
+		resp.Body.Close()
+		if doc.Path != "note.md" {
+			t.Fatalf("expected note.md, got %s", doc.Path)
+		}
+		if !strings.Contains(doc.HTML, "Non Git Note") {
+			t.Fatalf("expected rendered markdown, got %s", doc.HTML)
+		}
+		return
+	}
+}
+
 func TestListenWithFallback_FallbackListenerIsUsable(t *testing.T) {
 	// ポートを先に占有する
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
@@ -184,4 +290,14 @@ func TestListenWithFallback_FallbackListenerIsUsable(t *testing.T) {
 		t.Fatalf("failed to connect to fallback listener: %v", err)
 	}
 	conn.Close()
+}
+
+func freePort(t *testing.T) string {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("find free port: %v", err)
+	}
+	defer listener.Close()
+	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port)
 }
