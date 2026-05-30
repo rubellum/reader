@@ -302,12 +302,23 @@ assert(r.readButton === "⊟" && r.writeButton === "⊟", "expanded section butt
 playwright-cli -s="${SESSION}" click "#toggle-read-section-btn" >/dev/null
 playwright-cli -s="${SESSION}" click "#toggle-write-section-btn" >/dev/null
 
+playwright-cli -s="${SESSION}" --raw eval "(() => {
+	const readSection = document.querySelector('#sidebar-section-read');
+	const writeSection = document.querySelector('#sidebar-section-write');
+	readSection.style.flex = '0 0 240px';
+	writeSection.style.flex = '1 1 0';
+})()" >/dev/null
+
 hidden_json="$(
 	playwright-cli -s="${SESSION}" --raw eval "JSON.stringify({
 		readHidden: document.querySelector('#sidebar-section-read').classList.contains('section-hidden'),
 		writeHidden: document.querySelector('#sidebar-section-write').classList.contains('section-hidden'),
 		readDisplay: getComputedStyle(document.querySelector('#file-list')).display,
 		writeDisplay: getComputedStyle(document.querySelector('#write-file-list')).display,
+		readSectionHeight: document.querySelector('#sidebar-section-read').getBoundingClientRect().height,
+		writeSectionHeight: document.querySelector('#sidebar-section-write').getBoundingClientRect().height,
+		readTitleHeight: document.querySelector('#sidebar-section-read .sidebar-section-title').getBoundingClientRect().height,
+		writeTitleHeight: document.querySelector('#sidebar-section-write .sidebar-section-title').getBoundingClientRect().height,
 		readButton: document.querySelector('#toggle-read-section-btn').textContent,
 		writeButton: document.querySelector('#toggle-write-section-btn').textContent
 	})"
@@ -319,6 +330,8 @@ if (typeof r === "string") r = JSON.parse(r);
 function assert(ok, msg) { if (!ok) throw new Error(msg + "\n" + JSON.stringify(r, null, 2)); }
 assert(r.readHidden && r.writeHidden, "section toggles should hide both sections");
 assert(r.readDisplay === "none" && r.writeDisplay === "none", "hidden sections should hide lists");
+assert(r.readSectionHeight <= r.readTitleHeight + 2, "hidden read section should collapse to its title");
+assert(r.writeSectionHeight <= r.writeTitleHeight + 2, "hidden write section should collapse to its title");
 assert(r.readButton === "▸" && r.writeButton === "▸", "hidden section buttons should point right");
 '
 

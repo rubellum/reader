@@ -321,7 +321,7 @@ body.resizing-sidebar {
 }
 
 .sidebar-section.section-hidden {
-  flex: 0 0 auto;
+  flex: 0 0 auto !important;
   min-height: auto;
 }
 
