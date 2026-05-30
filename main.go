@@ -378,6 +378,7 @@ func main() {
 		Exclude:             effectiveExclude,
 		Verbose:             verbosity > 0,
 		ArchiveDir:          *archiveDir,
+		ArchiveBasePath:     absTargetDir,
 		PullRequestsEnabled: *pullRequests,
 	})
 

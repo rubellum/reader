@@ -268,6 +268,113 @@ func TestMainStartsWithNonGitDirectoryAndServesFile(t *testing.T) {
 	}
 }
 
+func TestMainArchiveReadRootUsesLaunchDir(t *testing.T) {
+	root := t.TempDir()
+	readDir := filepath.Join(root, "test")
+	if err := os.MkdirAll(readDir, 0o755); err != nil {
+		t.Fatalf("mkdir read dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(readDir, "a.md"), []byte("# A"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+
+	port := freePort(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	repoDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	binPath := filepath.Join(root, "reader-test")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Dir = repoDir
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build reader: %v\n%s", err, string(out))
+	}
+	cmd := exec.CommandContext(ctx, binPath, "-no-open", "-host", "127.0.0.1", "-port", port, "-read", "test")
+	cmd.Dir = root
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("stdout pipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("stderr pipe: %v", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start reader: %v", err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- cmd.Wait() }()
+	processExited := false
+	t.Cleanup(func() {
+		if !processExited {
+			cancel()
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			select {
+			case <-errCh:
+			case <-time.After(2 * time.Second):
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				<-errCh
+			}
+		}
+	})
+	stdoutCh := make(chan string, 1)
+	stderrCh := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(stdout)
+		stdoutCh <- string(b)
+	}()
+	go func() {
+		b, _ := io.ReadAll(stderr)
+		stderrCh <- string(b)
+	}()
+
+	url := "http://127.0.0.1:" + port + "/api/archive?path=a.md"
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case err := <-errCh:
+			processExited = true
+			t.Fatalf("reader exited before serving archive request: %v\nstdout=%s\nstderr=%s", err, <-stdoutCh, <-stderrCh)
+		case <-deadline:
+			t.Fatalf("reader did not start for archive request within timeout")
+		default:
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+		if err != nil {
+			t.Fatalf("create request: %v", err)
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("unexpected status: %d body=%s", resp.StatusCode, string(body))
+		}
+		break
+	}
+
+	if _, err := os.Stat(filepath.Join(readDir, "a.md")); !os.IsNotExist(err) {
+		t.Fatalf("source file should be moved, stat err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "archive", "test", "a.md")); err != nil {
+		t.Fatalf("expected archived file under launch dir: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(readDir, "archive", "a.md")); !os.IsNotExist(err) {
+		t.Fatalf("file must not be archived under read root, stat err=%v", err)
+	}
+}
+
 func TestListenWithFallback_FallbackListenerIsUsable(t *testing.T) {
 	// ポートを先に占有する
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")

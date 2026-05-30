@@ -85,6 +85,7 @@ type Server struct {
 	include             []string
 	exclude             []string
 	archiveDir          string
+	archiveBasePath     string
 	codingAgentService  *codingagent.Service
 	prCache             *pullRequestCache
 	prRunner            ghRunner
@@ -111,6 +112,7 @@ type Options struct {
 	ExtraReadSortDesc   bool
 	WriteSortDesc       bool
 	ArchiveDir          string
+	ArchiveBasePath     string
 	CodingAgentRunner   codingagent.Runner
 	PullRequestsEnabled bool
 }
@@ -130,12 +132,16 @@ func NewWithOptions(opts Options) *Server {
 		include:             opts.Include,
 		exclude:             opts.Exclude,
 		archiveDir:          opts.ArchiveDir,
+		archiveBasePath:     opts.ArchiveBasePath,
 		prCache:             newPullRequestCache(),
 		prRunner:            defaultGHRunner{},
 		pullRequestsEnabled: opts.PullRequestsEnabled,
 	}
 	if s.archiveDir == "" {
 		s.archiveDir = "archive"
+	}
+	if s.archiveBasePath != "" {
+		s.archiveBasePath = resolveAbs(s.archiveBasePath)
 	}
 	readOpts := opts.ReadRoots
 	if len(readOpts) == 0 {
@@ -656,10 +662,22 @@ func (s *Server) handleArchive(c echo.Context) error {
 
 	archiveBase := s.archiveDir
 	if !filepath.IsAbs(archiveBase) {
-		archiveBase = filepath.Join(ctx.basePath, archiveBase)
+		basePath := s.archiveBasePath
+		if basePath == "" {
+			basePath = ctx.basePath
+		}
+		archiveBase = filepath.Join(basePath, archiveBase)
+	}
+	destPath := cleanPath
+	if s.archiveBasePath != "" {
+		absArchiveBasePath, _ := filepath.Abs(s.archiveBasePath)
+		absCtxBase, _ := filepath.Abs(ctx.basePath)
+		if absCtxBase != absArchiveBasePath {
+			destPath = filepath.Join(filepath.Base(ctx.basePath), cleanPath)
+		}
 	}
 	absArchiveBase, _ := filepath.Abs(archiveBase)
-	absDest, _ := filepath.Abs(filepath.Join(absArchiveBase, cleanPath))
+	absDest, _ := filepath.Abs(filepath.Join(absArchiveBase, destPath))
 	relDest, relErr := filepath.Rel(absArchiveBase, absDest)
 	if relErr != nil || relDest == ".." || strings.HasPrefix(relDest, ".."+string(filepath.Separator)) {
 		return echo.NewHTTPError(http.StatusForbidden, "アクセスが拒否されました")
@@ -681,7 +699,7 @@ func (s *Server) handleArchive(c echo.Context) error {
 
 	archivedPath := absDest
 	if !filepath.IsAbs(s.archiveDir) {
-		archivedPath = filepath.Join(s.archiveDir, cleanPath)
+		archivedPath = filepath.Join(s.archiveDir, destPath)
 	}
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"path":         filepath.ToSlash(cleanPath),
